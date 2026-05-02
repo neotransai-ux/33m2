@@ -1,0 +1,2910 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>33m2 오피스텔 크롤러 + 예약 분석</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #222; }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1a2a4a, #2c72c8);
+      color: #fff; padding: 16px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 10px rgba(0,0,0,.25);
+      position: sticky; top: 0; z-index: 200;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 700; }
+    header p  { font-size: .75rem; opacity: .75; margin-top: 2px; }
+    #loginStatus {
+      font-size: .8rem; display: flex; align-items: center; gap: 10px;
+    }
+    #loginStatus .user-badge {
+      background: rgba(255,255,255,.2); padding: 4px 10px;
+      border-radius: 20px; font-weight: 600;
+    }
+
+    /* ── Sticky 높이 변수 ── */
+    :root { --header-h: 70px; --tabbar-h: 50px; }
+
+    /* ── 상단 탭바 (가로) ── */
+    .tab-bar {
+      background: #fff; display: flex; gap: 0;
+      border-bottom: 2px solid #e0e0e0;
+      padding: 0 28px;
+      position: sticky; top: var(--header-h); z-index: 150;
+    }
+    .tab {
+      padding: 13px 20px; cursor: pointer;
+      font-size: .9rem; font-weight: 600; color: #888;
+      border-bottom: 3px solid transparent; margin-bottom: -2px;
+      transition: color .15s, border-color .15s;
+      display: flex; align-items: center; gap: 8px;
+      user-select: none;
+    }
+    .tab.active { color: #2c72c8; border-bottom-color: #2c72c8; }
+    .tab:hover:not(.active) { color: #555; }
+    .tab .tab-icon { font-size: 1rem; line-height: 1; }
+    .tab.locked { color: #bbb; cursor: not-allowed; }
+    .tab.locked:hover:not(.active) { color: #bbb; }
+    .tab.locked .tab-lock { font-size: .8rem; margin-left: 2px; opacity: .7; }
+
+    /* ── 탭 내부 레이아웃 (왼쪽 컨트롤 사이드바 + 오른쪽 결과) ── */
+    .tab-layout {
+      display: flex; align-items: stretch;
+      min-height: calc(100vh - var(--header-h) - var(--tabbar-h));
+    }
+    .tab-sidebar {
+      width: 240px; flex-shrink: 0;
+      background: #fff;
+      border-right: 1px solid #e0e0e0;
+      padding: 18px 16px 24px;
+      position: sticky;
+      top: calc(var(--header-h) + var(--tabbar-h));
+      height: calc(100vh - var(--header-h) - var(--tabbar-h));
+      overflow-y: auto;
+      display: flex; flex-direction: column; gap: 14px;
+      box-shadow: 1px 0 3px rgba(0,0,0,.04);
+    }
+    .tab-content { flex: 1; min-width: 0; }
+
+    .sb-section { display: flex; flex-direction: column; gap: 6px; }
+    .sb-section > label {
+      font-size: .72rem; font-weight: 700; color: #888;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .sb-section select, .sb-section input.ctrl-input {
+      width: 100%; padding: 9px 11px; min-width: 0;
+    }
+    .sb-mode-toggle {
+      display: flex; flex-direction: column; gap: 0;
+      border: 1px solid #ccc; border-radius: 8px; overflow: hidden;
+    }
+    .sb-mode-toggle .mode-btn {
+      padding: 10px 13px; border: none; background: #f5f7fa;
+      font-size: .85rem; font-weight: 600; color: #666;
+      cursor: pointer; border-bottom: 1px solid #ccc;
+      text-align: left; border-right: none;
+    }
+    .sb-mode-toggle .mode-btn:last-child { border-bottom: none; }
+    .sb-mode-toggle .mode-btn.active { background: #2c72c8; color: #fff; }
+    .sb-mode-toggle .mode-btn:hover:not(.active) { background: #e8edf5; }
+
+    .sb-divider { border-top: 1px dashed #e0e0e0; margin: 4px 0; }
+    .sb-actions {
+      margin-top: auto; display: flex; flex-direction: column; gap: 8px;
+      padding-top: 6px;
+    }
+    .sb-actions .btn {
+      padding: 11px; width: 100%; justify-content: center;
+      font-size: .85rem;
+    }
+    .sb-badge {
+      background: #eaf4fb; color: #2c72c8; font-size: .82rem; font-weight: 700;
+      padding: 7px 12px; border-radius: 8px; text-align: center;
+    }
+
+    /* ── Controls ── */
+    .controls {
+      background: #fff; padding: 12px 28px;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      border-bottom: 1px solid #e8e8e8;
+    }
+    .controls label { font-size: .82rem; font-weight: 600; color: #555; white-space: nowrap; }
+    .controls select { padding: 7px 10px; border: 1px solid #ccc; border-radius: 7px; font-size: .82rem; }
+
+    /* ── Search mode toggle ── */
+    .mode-toggle { display: flex; gap: 0; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; }
+    .mode-btn {
+      padding: 7px 13px; border: none; background: #f5f7fa;
+      font-size: .8rem; font-weight: 600; color: #666;
+      cursor: pointer; transition: background .15s, color .15s;
+      border-right: 1px solid #ccc;
+    }
+    .mode-btn:last-child { border-right: none; }
+    .mode-btn.active { background: #2c72c8; color: #fff; }
+    .mode-btn:hover:not(.active) { background: #e8edf5; }
+
+    /* ── Toggle switch ── */
+    .toggle-label {
+      display: flex; align-items: center; gap: 7px;
+      font-size: .82rem; font-weight: 600; color: #555;
+      cursor: pointer; user-select: none; white-space: nowrap;
+    }
+    .toggle-label input[type="checkbox"] { display: none; }
+    .toggle-track {
+      position: relative; width: 36px; height: 20px;
+      background: #ccc; border-radius: 20px;
+      transition: background .2s; flex-shrink: 0;
+    }
+    .toggle-thumb {
+      position: absolute; top: 3px; left: 3px;
+      width: 14px; height: 14px; background: #fff;
+      border-radius: 50%; transition: transform .2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    }
+    .toggle-label input:checked + .toggle-track { background: #2c72c8; }
+    .toggle-label input:checked + .toggle-track .toggle-thumb { transform: translateX(16px); }
+
+    /* ── Coord / keyword inputs ── */
+    .ctrl-input {
+      padding: 7px 11px; border: 1px solid #ccc; border-radius: 7px;
+      font-size: .82rem; min-width: 200px;
+    }
+    #coordInput { /* 사이드바 내에서 100% width */ }
+    .ctrl-sep { width: 1px; height: 28px; background: #ddd; margin: 0 2px; }
+    .btn {
+      padding: 8px 16px; border: none; border-radius: 7px;
+      cursor: pointer; font-size: .82rem; font-weight: 600;
+      transition: background .15s, opacity .15s;
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    .btn-primary          { background: #2c72c8; color: #fff; }
+    .btn-primary:hover    { background: #2460ad; }
+    .btn-primary:disabled { background: #9ab8e0; cursor: not-allowed; }
+    .btn-secondary        { background: #ecf0f1; color: #555; }
+    .btn-secondary:hover  { background: #dde3e7; }
+    .btn-danger           { background: #e74c3c; color: #fff; }
+    .btn-danger:hover     { background: #c0392b; }
+    .btn-green            { background: #27ae60; color: #fff; }
+    .btn-green:hover      { background: #219150; }
+    .btn-green:disabled   { background: #a0d4b8; cursor: not-allowed; }
+
+    /* ── Status bar ── */
+    .status-bar {
+      padding: 9px 28px; font-size: .82rem; font-weight: 500;
+      display: none; border-bottom: 1px solid transparent;
+    }
+
+    /* ── Main ── */
+    .main { padding: 22px 28px; }
+
+    /* Stats */
+    .stats { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+    .stat-box {
+      background: #fff; border-radius: 10px; padding: 13px 20px;
+      box-shadow: 0 1px 5px rgba(0,0,0,.07); flex: 1; min-width: 120px; text-align: center;
+    }
+    .stat-box .num { font-size: 1.6rem; font-weight: 800; color: #2c72c8; }
+    .stat-box .lbl { font-size: .75rem; color: #888; margin-top: 2px; }
+
+    /* Filter bar */
+    .filter-bar {
+      background: #fff; border-radius: 10px; padding: 11px 16px;
+      margin-bottom: 18px; box-shadow: 0 1px 5px rgba(0,0,0,.07);
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    .filter-bar input, .filter-bar select {
+      padding: 7px 11px; border: 1px solid #ddd; border-radius: 7px; font-size: .82rem;
+    }
+    .filter-bar input { flex: 1; min-width: 160px; }
+
+    /* Room list (가로 row 방식) */
+    .grid { display: flex; flex-direction: column; gap: 8px; }
+
+    .card {
+      background: #fff; border-radius: 10px; overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      transition: box-shadow .15s, outline .15s;
+      display: flex; flex-direction: row; align-items: stretch;
+    }
+    .card.selectable { cursor: pointer; }
+    .card.selectable.selected {
+      outline: 2px solid #2c72c8;
+      box-shadow: 0 3px 10px rgba(44,114,200,.2);
+    }
+    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+
+    .card-img-wrap {
+      position: relative; width: 140px; flex-shrink: 0;
+      background: #dce1e9; align-self: stretch; min-height: 96px;
+      overflow: hidden;
+    }
+    .card-img-wrap img {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; transition: transform .3s;
+    }
+    .card-img-placeholder {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; color: #9aa5b4;
+    }
+    .badge-row {
+      position: absolute; top: 6px; left: 6px;
+      display: flex; gap: 4px; flex-wrap: wrap;
+    }
+    .badge {
+      font-size: .65rem; font-weight: 700; padding: 2px 6px;
+      border-radius: 12px; line-height: 1.2;
+    }
+    .badge-new       { background: #2c72c8; color: #fff; }
+    .badge-superhost { background: #ff6b35; color: #fff; }
+    .badge-discount  { background: #27ae60; color: #fff; }
+
+    .card-body {
+      flex: 1; min-width: 0;
+      padding: 10px 16px;
+      display: flex; flex-direction: column; gap: 3px;
+      justify-content: center;
+    }
+    .card-location { font-size: .73rem; color: #888; }
+    .card-title    { font-size: .95rem; font-weight: 700; color: #1a2a4a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card-price    { font-size: .92rem; font-weight: 700; color: #d94f35; }
+    .card-meta     { display: flex; gap: 5px; flex-wrap: wrap; }
+    .meta-chip     { background: #f0f4f8; border-radius: 12px; padding: 2px 8px; font-size: .72rem; color: #555; }
+    .card-address  { font-size: .72rem; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .card-check-wrap {
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 18px;
+    }
+    .check-circle {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: #fff; color: transparent;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .95rem; font-weight: 700;
+      border: 2px solid #d0d7e0;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    .card.selected .check-circle {
+      background: #2c72c8; color: #fff; border-color: #2c72c8;
+    }
+
+    @media (max-width: 600px) {
+      .card-img-wrap { width: 100px; }
+      .card-body { padding: 8px 12px; }
+      .card-check-wrap { padding: 0 12px; }
+    }
+
+    /* ── 예약 분석 탭 ── */
+    #analysisTab { display: none; }  /* JS로 제어 */
+
+    .login-banner {
+      background: #fff; border-radius: 12px; padding: 40px;
+      text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,.08);
+      max-width: 440px; margin: 40px auto;
+    }
+    .login-banner h2 { font-size: 1.2rem; margin-bottom: 8px; color: #1a2a4a; }
+    .login-banner p  { font-size: .88rem; color: #666; margin-bottom: 24px; }
+    .login-form { display: flex; flex-direction: column; gap: 10px; }
+    .login-form input {
+      padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px;
+      font-size: .9rem; width: 100%;
+    }
+    .login-form input:focus { outline: none; border-color: #2c72c8; }
+    .login-err { color: #e74c3c; font-size: .82rem; margin-top: 4px; }
+
+    /* 분석 설정 바 */
+    .analysis-controls {
+      background: #fff; border-radius: 10px; padding: 14px 18px;
+      margin-bottom: 18px; box-shadow: 0 1px 5px rgba(0,0,0,.07);
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    .analysis-controls label { font-size: .82rem; font-weight: 600; color: #555; white-space: nowrap; }
+    .analysis-controls select { padding: 7px 10px; border: 1px solid #ccc; border-radius: 7px; font-size: .82rem; }
+    .selected-count {
+      background: #eaf4fb; color: #2c72c8; font-size: .82rem; font-weight: 700;
+      padding: 5px 12px; border-radius: 20px;
+    }
+
+    /* 분석 결과 - 표 형식 */
+    .analysis-grid { display: flex; flex-direction: column; gap: 16px; }
+
+    .analysis-table-wrap {
+      background: #fff; border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+      overflow-x: auto; overflow-y: visible;
+    }
+    .analysis-table {
+      width: 100%; border-collapse: separate; border-spacing: 0;
+      font-size: .82rem; min-width: 900px;
+    }
+    .analysis-table thead th {
+      background: #f5f7fa; padding: 11px 10px;
+      font-size: .74rem; font-weight: 700; color: #555;
+      text-align: center; border-bottom: 2px solid #e0e0e0;
+      white-space: nowrap;
+    }
+    .analysis-table thead th.col-title { text-align: left; padding-left: 16px; }
+    .analysis-table thead th.sortable { cursor: pointer; user-select: none; transition: background .12s; }
+    .analysis-table thead th.sortable:hover { background: #e8edf3; }
+    .sort-ind { color: #bbb; font-size: .72rem; margin-left: 3px; display: inline-block; }
+    .sort-ind.active { color: #2c72c8; font-weight: 700; }
+
+    /* 3개 섹션 그룹 헤더 */
+    .analysis-table thead .group-row th {
+      font-size: .85rem; font-weight: 800;
+      padding: 10px 8px; text-align: center;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .analysis-table thead .group-info    { background: #e8f0f9; color: #2c72c8; }
+    .analysis-table thead .group-booking { background: #fff4e3; color: #e67e22; }
+    .analysis-table thead .group-profit  { background: #e8f5ed; color: #27ae60; }
+
+    .analysis-table th.section-end,
+    .analysis-table td.section-end   { border-right: 2px solid #c5cdd6; }
+    .analysis-table th.section-start,
+    .analysis-table td.section-start { border-left: 2px solid #c5cdd6; }
+
+    .cell-sub  { font-size: .72rem; color: #888; margin-top: 2px; }
+    .fee-line  { font-size: .76rem; line-height: 1.45; text-align: left; }
+    .fee-line .fk { color: #888; margin-right: 4px; }
+    .fee-line .fv { font-weight: 600; color: #333; }
+
+    /* 그룹 헤더 행 (건물별 묶기) */
+    .group-header-row td {
+      background: linear-gradient(90deg, #eaf3fb 0%, #f5fafd 100%) !important;
+      padding: 9px 16px !important;
+      border-top: 2px solid #2c72c8 !important;
+      border-bottom: 1px solid #c8dcf5 !important;
+    }
+    .group-header {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 12px; flex-wrap: wrap; font-size: .82rem;
+    }
+    .group-addr {
+      font-weight: 700; color: #1a2a4a;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .group-meta { color: #555; font-size: .78rem; }
+    .group-meta strong { color: #2c72c8; }
+    /* (층은 별도 컬럼으로 표시) */
+    .analysis-table tbody td {
+      padding: 10px; border-bottom: 1px solid #f0f0f0;
+      vertical-align: middle; text-align: center;
+    }
+    .analysis-table tbody tr:hover { background: #fafbff; }
+    .analysis-table tbody tr:last-child td { border-bottom: none; }
+    .analysis-table .month-cell { padding: 6px 4px; min-width: 56px; }
+    .analysis-table .col-num { white-space: nowrap; }
+
+    /* 매물 셀 (대표이미지 + 매물명 + 지도 + 이미지 strip) */
+    .title-cell {
+      text-align: left !important;
+      padding: 12px 14px !important;
+      min-width: 290px; max-width: 330px;
+      vertical-align: top !important;
+    }
+    .title-rich { display: flex; gap: 10px; align-items: flex-start; }
+    .title-thumb {
+      flex-shrink: 0;
+      width: 96px; height: 64px;
+      border-radius: 6px;
+      background: #dce1e9 center/cover no-repeat;
+      cursor: pointer;
+      border: 1px solid #e0e0e0;
+      transition: outline .12s;
+    }
+    .title-thumb:hover { outline: 2px solid #2c72c8; }
+    .title-thumb-placeholder {
+      flex-shrink: 0;
+      width: 96px; height: 64px; border-radius: 6px;
+      background: #dce1e9;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; color: #9aa5b4;
+    }
+
+    .title-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .title-name {
+      font-weight: 700; color: #1a2a4a; font-size: .92rem;
+      cursor: pointer;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .title-name:hover { color: #2c72c8; text-decoration: underline; }
+    .title-addr { font-size: .72rem; color: #888; line-height: 1.4; }
+
+    .title-actions { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
+    .title-action-btn {
+      font-size: .7rem; font-weight: 600;
+      padding: 3px 8px; border-radius: 4px;
+      border: 1px solid #d0d7e0;
+      color: #555; background: #fff;
+      text-decoration: none; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 3px;
+      white-space: nowrap;
+    }
+    .title-action-btn:hover {
+      background: #eaf3fb; color: #2c72c8; border-color: #2c72c8;
+    }
+
+    .title-img-strip {
+      display: flex; gap: 4px; margin-top: 8px;
+      overflow-x: auto; padding-bottom: 2px;
+      scrollbar-width: thin;
+    }
+    .title-img-strip::-webkit-scrollbar { height: 5px; }
+    .title-img-strip::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+    .strip-thumb {
+      flex-shrink: 0;
+      width: 44px; height: 32px;
+      border-radius: 3px;
+      background: #dce1e9 center/cover no-repeat;
+      cursor: pointer;
+      border: 1px solid #e0e0e0;
+      transition: outline .12s, transform .12s;
+    }
+    .strip-thumb:hover {
+      outline: 2px solid #2c72c8;
+      transform: translateY(-1px);
+    }
+    .title-img-more {
+      flex-shrink: 0;
+      width: 44px; height: 32px; border-radius: 3px;
+      background: #f0f4f8; color: #555;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .7rem; font-weight: 700;
+      border: 1px solid #d0d7e0;
+    }
+
+    /* 호버 이미지/지도 미리보기 (전역 단일 popup, 사이즈는 JS가 inline으로 지정) */
+    #previewPopup {
+      position: fixed; display: none; z-index: 700;
+      width: 300px; height: 200px; background: #fff;
+      border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.25);
+      overflow: hidden; pointer-events: none;
+      border: 1px solid #e0e0e0;
+    }
+    #previewPopup > img,
+    #previewPopup > iframe {
+      width: 100%; height: 100%;
+      display: block; border: 0;
+      background: #f5f7fa;
+    }
+    #previewPopup > img { object-fit: cover; }
+
+    /* 호버 달력 팝업 */
+    #calendarPopup {
+      position: fixed; display: none; z-index: 700;
+      width: 300px; background: #fff;
+      border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.25);
+      padding: 12px 14px; pointer-events: none;
+      border: 1px solid #e0e0e0;
+      font-size: .8rem;
+    }
+    #calendarPopup .cal-head {
+      font-weight: 700; color: #1a2a4a; font-size: .82rem;
+      text-align: center; margin-bottom: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #calendarPopup .cal-month {
+      text-align: center; font-size: .76rem; color: #555;
+      margin-bottom: 10px;
+    }
+    #calendarPopup .cal-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
+    }
+    #calendarPopup .cal-dow,
+    #calendarPopup .cal-day {
+      text-align: center; padding: 5px 0;
+      font-size: .72rem; border-radius: 4px;
+    }
+    #calendarPopup .cal-dow { color: #888; font-weight: 700; padding: 2px 0; }
+    #calendarPopup .cal-dow.sun { color: #e74c3c; }
+    #calendarPopup .cal-dow.sat { color: #2c72c8; }
+    #calendarPopup .cal-day        { background: #f5f7fa; color: #333; }
+    #calendarPopup .cal-day.booked { background: #e74c3c; color: #fff; font-weight: 700; }
+    #calendarPopup .cal-day.disabled { background: #888; color: #fff; }
+    #calendarPopup .cal-day.empty  { background: transparent; }
+    #calendarPopup .cal-legend {
+      display: flex; gap: 10px; margin-top: 10px;
+      font-size: .68rem; color: #666;
+      justify-content: center; flex-wrap: wrap;
+      border-top: 1px solid #f0f0f0; padding-top: 8px;
+    }
+    #calendarPopup .cal-legend-dot {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 50%; margin-right: 3px; vertical-align: middle;
+    }
+    .month-cell, .year-cell { cursor: help; }
+
+    /* 전체 예약율 호버 → 연간 strip 모드 */
+    #calendarPopup.year-strip-mode { width: 540px; }
+    .ys-grid { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+    .ys-row {
+      display: grid;
+      grid-template-columns: 32px 42px 1fr;
+      gap: 6px; align-items: center;
+    }
+    .ys-label { font-size: .72rem; font-weight: 700; color: #555; text-align: right; }
+    .ys-rate  { font-size: .72rem; font-weight: 700; text-align: right; }
+    .ys-days {
+      display: grid; grid-template-columns: repeat(31, 1fr); gap: 1px;
+    }
+    .ys-day {
+      aspect-ratio: 1; background: #f5f7fa; border-radius: 2px; min-height: 11px;
+    }
+    .ys-day.booked   { background: #e74c3c; }
+    .ys-day.disabled { background: #888; }
+    .ys-day.empty    { background: transparent; }
+    .ys-row.ys-header .ys-days > div {
+      font-size: .55rem; color: #aaa; text-align: center; line-height: 1.1;
+    }
+
+    /* 표 셀 색 강조 */
+    .rate-cell {
+      font-weight: 700; display: inline-block; min-width: 36px;
+    }
+    .rec-rent { font-weight: 800; color: #2c72c8; }
+    .price-main { font-weight: 600; color: #d94f35; }
+    .price-sub  { font-size: .7rem; color: #888; margin-top: 2px; }
+
+    /* 이미지 라이트박스 */
+    .lightbox-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.85);
+      display: none; align-items: center; justify-content: center;
+      z-index: 800; cursor: zoom-out; padding: 20px;
+    }
+    .lightbox-overlay.open { display: flex; }
+    .lightbox-content {
+      background: #fff; border-radius: 12px; overflow: hidden;
+      max-width: 90vw; max-height: 90vh; cursor: default;
+      display: flex; flex-direction: column;
+      box-shadow: 0 12px 40px rgba(0,0,0,.5);
+    }
+    .lightbox-content img {
+      max-width: 90vw; max-height: 75vh; display: block; background: #000;
+    }
+    .lightbox-info { padding: 14px 20px; background: #fff; }
+    .lightbox-info h3 { font-size: 1.05rem; margin-bottom: 5px; color: #1a2a4a; }
+    .lightbox-info p  { font-size: .82rem; color: #666; margin-bottom: 8px; }
+    .lightbox-info a {
+      display: inline-block; color: #2c72c8; font-size: .82rem;
+      font-weight: 600; text-decoration: none;
+    }
+    .lightbox-info a:hover { text-decoration: underline; }
+    .lightbox-close {
+      position: absolute; top: 18px; right: 18px;
+      width: 38px; height: 38px; border-radius: 50%;
+      background: rgba(255,255,255,.18); color: #fff; border: none;
+      font-size: 1.3rem; cursor: pointer; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+    }
+    .lightbox-close:hover { background: rgba(255,255,255,.35); }
+
+    .analysis-card {
+      background: #fff; border-radius: 13px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08); overflow: hidden;
+    }
+    .analysis-header {
+      display: flex; align-items: center; gap: 16px;
+      padding: 16px 20px; border-bottom: 1px solid #f0f0f0;
+    }
+    .analysis-header img {
+      width: 80px; height: 54px; object-fit: cover; border-radius: 8px; flex-shrink: 0;
+    }
+    .analysis-header .img-placeholder {
+      width: 80px; height: 54px; background: #e9ecef; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; color: #adb5bd; flex-shrink: 0;
+    }
+    .analysis-header .info { flex: 1; min-width: 0; }
+    .analysis-header .info h3 {
+      font-size: .95rem; font-weight: 700; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; color: #1a2a4a;
+    }
+    .analysis-header .info p { font-size: .78rem; color: #888; margin-top: 3px; }
+    .overall-rate {
+      font-size: 1.5rem; font-weight: 800; flex-shrink: 0;
+      text-align: center;
+    }
+    .rate-label { font-size: .7rem; color: #888; margin-top: 2px; }
+
+    .monthly-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 10px; padding: 16px 20px;
+    }
+    .month-box {
+      background: #f8f9fb; border-radius: 8px; padding: 10px;
+      text-align: center;
+    }
+    .month-box .month-name { font-size: .72rem; color: #666; margin-bottom: 5px; }
+    .month-box .month-rate { font-size: 1.2rem; font-weight: 800; }
+    .month-box .month-sub  { font-size: .68rem; color: #888; margin-top: 3px; }
+    .rate-bar-wrap {
+      background: #e8ecf0; border-radius: 20px; height: 6px; margin-top: 6px; overflow: hidden;
+    }
+    .rate-bar { height: 100%; border-radius: 20px; transition: width .4s; }
+
+    /* 예약율에 따른 색상 */
+    .rate-high   { color: #e74c3c; }
+    .rate-med    { color: #e67e22; }
+    .rate-low    { color: #27ae60; }
+    .bar-high    { background: #e74c3c; }
+    .bar-med     { background: #e67e22; }
+    .bar-low     { background: #27ae60; }
+
+    .analysis-error {
+      padding: 16px 20px; color: #e74c3c; font-size: .85rem;
+    }
+
+    /* ── 분석 툴바 (한 줄 통합: 토글 + 초기화 + 인라인 상태) ── */
+    .analysis-toolbar {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .toolbar-spacer { flex: 1; }
+    .status-inline {
+      display: none; font-size: .8rem; font-weight: 600;
+      padding: 5px 12px; border-radius: 18px;
+      border: 1px solid transparent;
+    }
+    .status-inline.show { display: inline-block; }
+
+    /* ── 수익분석 패널 (접기 가능) ── */
+    .sim-panel {
+      background: #f0f6ff; border: 1px solid #c8dcf5; border-radius: 10px;
+      margin-bottom: 18px; overflow: hidden;
+    }
+    .sim-panel-header {
+      width: 100%; background: transparent; border: 0; cursor: pointer;
+      padding: 10px 16px;
+      display: flex; align-items: center; gap: 10px;
+      font: inherit; color: inherit; text-align: left;
+    }
+    .sim-panel-header:hover { background: rgba(255,255,255,.5); }
+    .sim-toggle-arrow {
+      font-size: .7rem; color: #2c72c8; transition: transform .18s;
+      display: inline-block; width: 12px;
+    }
+    .sim-panel:not(.collapsed) .sim-toggle-arrow { transform: rotate(90deg); }
+    .sim-panel-title {
+      font-size: .85rem; font-weight: 700; color: #2c72c8; white-space: nowrap;
+    }
+    .sim-summary {
+      font-size: .78rem; color: #5a7090; margin-left: auto;
+    }
+    .sim-panel.collapsed .sim-summary { display: inline; }
+    .sim-panel:not(.collapsed) .sim-summary { display: none; }
+    .sim-panel-body {
+      padding: 0 16px 13px; gap: 18px;
+      display: flex; align-items: center; flex-wrap: wrap;
+      border-top: 1px solid #d8e4f1;
+      padding-top: 13px;
+    }
+    .sim-panel.collapsed .sim-panel-body { display: none; }
+    .sim-field {
+      display: flex; align-items: center; gap: 7px; white-space: nowrap;
+    }
+    .sim-field label { font-size: .8rem; font-weight: 600; color: #555; }
+    .sim-field input[type="range"] {
+      width: 110px; accent-color: #2c72c8; cursor: pointer;
+    }
+    .sim-field input[type="number"] {
+      width: 110px; padding: 5px 8px; border: 1px solid #ccc;
+      border-radius: 6px; font-size: .8rem; text-align: right;
+    }
+    .sim-val {
+      font-size: .82rem; font-weight: 700; color: #2c72c8;
+      min-width: 36px; text-align: right;
+    }
+
+    /* ── 시뮬레이션 결과 (카드 하단) ── */
+    .sim-result {
+      border-top: 1px solid #eef0f4;
+      padding: 12px 20px 14px;
+      background: #fafbff;
+      display: flex; gap: 12px; flex-wrap: wrap; align-items: stretch;
+    }
+    .sim-block {
+      flex: 1; min-width: 160px; background: #fff; border-radius: 9px;
+      padding: 11px 14px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .sim-block-title {
+      font-size: .7rem; font-weight: 700; color: #888;
+      text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px;
+    }
+    .sim-row {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: .79rem; padding: 3px 0; border-bottom: 1px solid #f3f4f6;
+    }
+    .sim-row:last-child { border-bottom: none; }
+    .sim-row .sim-key   { color: #666; }
+    .sim-row .sim-num   { font-weight: 600; color: #333; }
+    .sim-highlight {
+      background: #eaf3ff; border-radius: 7px; padding: 8px 12px;
+      margin-top: 6px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .sim-highlight .sim-key  { font-size: .8rem; font-weight: 700; color: #2c72c8; }
+    .sim-highlight .sim-rent { font-size: 1.15rem; font-weight: 800; color: #2c72c8; }
+    .sim-profit-pos { color: #27ae60; font-weight: 700; }
+    .sim-profit-neg { color: #e74c3c; font-weight: 700; }
+
+    /* Spinner */
+    .spinner { display: none; text-align: center; padding: 50px 20px; }
+    .spinner-circle {
+      width: 44px; height: 44px; border: 5px solid #dde;
+      border-top-color: #2c72c8; border-radius: 50%;
+      animation: spin .75s linear infinite; display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Error box */
+    .error-box {
+      background: #fdf2f2; border-left: 4px solid #e74c3c;
+      padding: 11px 16px; border-radius: 6px;
+      color: #c0392b; font-size: .85rem; margin-bottom: 16px; display: none;
+    }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 50px 20px; color: #aaa; }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 10px; }
+    .empty-state p { font-size: .92rem; }
+
+    /* ── 수익분석 모달 ── */
+    .profit-modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      display: none; align-items: flex-start; justify-content: center;
+      z-index: 900; padding: 30px 20px; overflow-y: auto;
+    }
+    .profit-modal-overlay.open { display: flex; }
+    .profit-modal {
+      background: #fff; border-radius: 12px;
+      width: 100%; max-width: 960px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.3); overflow: hidden;
+    }
+    .profit-modal-header {
+      padding: 14px 20px; border-bottom: 1px solid #eee;
+      display: flex; align-items: flex-start; gap: 14px;
+      background: linear-gradient(135deg, #f7f9fc 0%, #fff 100%);
+    }
+    .profit-modal-header h3 {
+      font-size: 1.05rem; color: #1a2a4a;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .profit-modal-header p { font-size: .78rem; color: #666; margin-top: 3px; }
+    .profit-modal-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.4rem; color: #888; padding: 0 6px;
+      line-height: 1;
+    }
+    .profit-modal-close:hover { color: #333; }
+    .profit-modal-body {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 14px; padding: 14px 18px;
+    }
+    @media (max-width: 768px) {
+      .profit-modal-body { grid-template-columns: 1fr; }
+    }
+    .profit-card {
+      border: 1px solid #e2e8ef; border-radius: 10px;
+      overflow: hidden; background: #fff;
+    }
+    .profit-card-header {
+      padding: 9px 13px; font-size: .9rem; font-weight: 700;
+      color: #1a2a4a; background: #f5f7fa;
+      border-bottom: 1px solid #e8ecf0;
+    }
+    .profit-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 13px; border-bottom: 1px solid #f3f5f8;
+      font-size: .82rem;
+    }
+    .profit-row:last-child { border-bottom: none; }
+    .profit-row .pr-label { flex: 1; color: #555; min-width: 0; }
+    .profit-row .pr-value {
+      font-weight: 600; color: #1a2a4a; text-align: right;
+      min-width: 110px; white-space: nowrap;
+    }
+    .profit-row.section-divider {
+      background: #eef2f7; font-size: .7rem; font-weight: 700;
+      color: #5a7090; padding: 5px 13px;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .profit-row.auto-row { background: #fafbfd; }
+    .profit-row.auto-row .pr-value { color: #888; font-weight: 500; }
+    .profit-row.auto-row .pr-label::after {
+      content: " 🔗"; font-size: .7rem; opacity: .5;
+    }
+    .profit-row.result-row { background: #f0f6ff; font-weight: 700; }
+    .profit-row.result-row .pr-value { color: #2c72c8; }
+    .profit-row.profit-final {
+      background: linear-gradient(90deg, #fff5e6 0%, #ffe8d6 100%);
+      padding: 9px 13px; font-size: .9rem; font-weight: 700;
+    }
+    .profit-row.profit-final .pr-value { font-size: 1rem; font-weight: 800; }
+    .profit-row.profit-final.positive .pr-value { color: #27ae60; }
+    .profit-row.profit-final.negative .pr-value { color: #c0392b; }
+    .profit-row input[type="number"] {
+      width: 130px; padding: 4px 8px;
+      border: 1px solid #d0d7e0; border-radius: 5px;
+      font-size: .82rem; text-align: right;
+    }
+    .profit-investment-row {
+      display: flex; gap: 6px; padding: 5px 13px;
+      align-items: center; border-bottom: 1px solid #f3f5f8;
+    }
+    .profit-investment-row input[type="text"] {
+      flex: 1; padding: 4px 8px; border: 1px solid #d0d7e0;
+      border-radius: 5px; font-size: .8rem;
+    }
+    .profit-investment-row input[type="number"] {
+      width: 110px; padding: 4px 8px; border: 1px solid #d0d7e0;
+      border-radius: 5px; font-size: .8rem; text-align: right;
+    }
+    .profit-investment-row .del-btn {
+      background: #fee; color: #c0392b; border: none;
+      width: 22px; height: 22px; border-radius: 50%;
+      cursor: pointer; font-size: .85rem; line-height: 1;
+      flex-shrink: 0;
+    }
+    .profit-investment-row .del-btn:hover { background: #fdd; }
+    .profit-add-btn {
+      margin: 7px 13px; padding: 5px 12px; width: calc(100% - 26px);
+      background: #f0f6ff; color: #2c72c8;
+      border: 1px dashed #2c72c8; border-radius: 6px;
+      cursor: pointer; font-size: .8rem;
+    }
+    .profit-add-btn:hover { background: #e1edff; }
+    .profit-modal-footer {
+      padding: 12px 18px; border-top: 1px solid #eee;
+      display: flex; justify-content: space-between; gap: 8px;
+      flex-wrap: wrap; background: #fafbfc;
+    }
+    .profit-modal-footer .footer-grp {
+      display: flex; gap: 7px; flex-wrap: wrap;
+    }
+
+    /* 표 셀 클릭 가능 (수익 분석 그룹) */
+    .clickable-profit { cursor: pointer; transition: background .12s; }
+    .clickable-profit:hover { background: #f0f6ff !important; }
+    .profit-analyze-btn {
+      background: #2c72c8; color: #fff; border: none;
+      padding: 4px 10px; border-radius: 5px;
+      font-size: .72rem; font-weight: 600; cursor: pointer;
+      white-space: nowrap;
+    }
+    .profit-analyze-btn:hover { background: #2460ad; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      display: none; align-items: center; justify-content: center; z-index: 500;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #fff; border-radius: 14px; padding: 32px 28px;
+      width: 100%; max-width: 420px; box-shadow: 0 10px 40px rgba(0,0,0,.2);
+    }
+    .modal h2 { font-size: 1.15rem; margin-bottom: 6px; color: #1a2a4a; }
+    .modal p  { font-size: .85rem; color: #666; margin-bottom: 20px; }
+
+    @media (max-width: 768px) {
+      .tab-layout { flex-direction: column; }
+      .tab-sidebar {
+        width: 100%; height: auto;
+        position: static; padding: 12px 14px;
+        border-right: none; border-bottom: 1px solid #e0e0e0;
+      }
+      .sb-actions { margin-top: 8px; }
+    }
+    @media (max-width: 600px) {
+      .tab-bar, .main { padding-left: 14px; padding-right: 14px; }
+      header { padding: 12px 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div>
+    <h1>🏢 33m2 크롤러 + 예약 분석</h1>
+    <p>web.33m2.co.kr 매물 수집 및 예약율 분석</p>
+  </div>
+  <div id="loginStatus">
+    <span id="guestLabel" style="opacity:.7;font-size:.8rem">비로그인 상태</span>
+    <button class="btn btn-secondary" id="loginBtn" onclick="openLoginModal()" style="font-size:.78rem;padding:5px 12px">로그인</button>
+  </div>
+</header>
+
+<!-- ── 상단 탭바 (가로) ── -->
+<div class="tab-bar">
+  <div class="tab active" id="tab-crawl" onclick="switchTab('crawl')">
+    <span class="tab-icon">📋</span><span>매물 크롤링</span>
+  </div>
+  <div class="tab locked" id="tab-analysis" onclick="switchTab('analysis')" title="로그인이 필요합니다">
+    <span class="tab-icon">📊</span><span>예약율 분석</span><span class="tab-lock">🔒</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     TAB 1: 매물 크롤링
+═══════════════════════════════════════════ -->
+<div id="crawlTab">
+  <div class="tab-layout">
+    <!-- ── 왼쪽 컨트롤 사이드바 ── -->
+    <aside class="tab-sidebar">
+      <div class="sb-section">
+        <label>검색 방식</label>
+        <div class="sb-mode-toggle">
+          <button class="mode-btn active" id="modeBtn-sort"    onclick="setSearchMode('sort')">정렬순</button>
+          <button class="mode-btn"        id="modeBtn-keyword" onclick="setSearchMode('keyword')">키워드</button>
+          <button class="mode-btn"        id="modeBtn-coord"   onclick="setSearchMode('coord')">좌표 링크</button>
+        </div>
+      </div>
+
+      <div class="sb-section" id="modeSort">
+        <label>정렬</label>
+        <select id="sort">
+          <option value="POPULAR">인기순</option>
+          <option value="RECENT">최신순</option>
+          <option value="PRICE_ASC">가격 낮은순</option>
+          <option value="PRICE_DESC">가격 높은순</option>
+        </select>
+      </div>
+
+      <div class="sb-section" id="modeKeyword" style="display:none">
+        <label>키워드</label>
+        <input type="text" id="keywordInput" class="ctrl-input" placeholder="예: 판교역, 강남구"
+               onkeydown="if(event.key==='Enter')startCrawl()"/>
+      </div>
+
+      <div class="sb-section" id="modeCoord" style="display:none">
+        <label>좌표 URL</label>
+        <input type="text" id="coordInput" class="ctrl-input"
+               placeholder="33m2 검색 URL 붙여넣기"
+               onkeydown="if(event.key==='Enter')startCrawl()"/>
+      </div>
+
+      <div class="sb-divider"></div>
+
+      <div class="sb-section">
+        <label>매물 유형</label>
+        <select id="propertyType">
+          <option value="OFFICETEL">오피스텔</option>
+          <option value="ONE_ROOM">원룸</option>
+          <option value="TWO_ROOM">투룸</option>
+          <option value="APARTMENT">아파트</option>
+        </select>
+      </div>
+
+      <div class="sb-section">
+        <label>최대 수집</label>
+        <select id="maxPages">
+          <option value="1">20개</option>
+          <option value="3">60개</option>
+          <option value="5" selected>100개</option>
+        </select>
+      </div>
+
+      <button class="btn btn-primary" id="crawlBtn" onclick="startCrawl()"
+              style="width:100%;padding:11px;justify-content:center">🔍 크롤링 시작</button>
+      <button class="btn btn-secondary" onclick="clearCrawl()"
+              style="width:100%;padding:9px;justify-content:center">초기화</button>
+
+      <div class="sb-divider"></div>
+
+      <div style="font-size:.78rem;font-weight:700;color:#2c72c8;margin-bottom:2px">📊 예약율 분석 옵션</div>
+
+      <div class="sb-section">
+        <label>분석 종료 월</label>
+        <select id="untilMonth">
+          <option value="5">5월</option>
+          <option value="6">6월</option>
+          <option value="7">7월</option>
+          <option value="8">8월</option>
+          <option value="9">9월</option>
+          <option value="10">10월</option>
+          <option value="11">11월</option>
+          <option value="12" selected>12월</option>
+        </select>
+      </div>
+
+      <div class="sb-section">
+        <label>분석 종료 연도</label>
+        <select id="untilYear">
+          <option value="2026" selected>2026년</option>
+          <option value="2027">2027년</option>
+        </select>
+      </div>
+
+      <label class="toggle-label" title="status=disable 날짜를 예약 불가로 집계합니다">
+        <input type="checkbox" id="includeDisable"/>
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        disable 포함
+      </label>
+
+      <div class="sb-badge" id="selCountBadge">선택 0개</div>
+
+      <div class="sb-actions">
+        <button class="btn btn-green" id="startAnalysisBtn" onclick="startAnalysis()" disabled>
+          📊 예약율 분석 시작
+        </button>
+      </div>
+    </aside>
+
+    <!-- ── 오른쪽 결과 영역 ── -->
+    <div class="tab-content">
+      <div class="status-bar" id="crawlStatus"></div>
+
+      <div class="main">
+        <div class="error-box" id="crawlError"></div>
+        <div class="spinner" id="crawlSpinner">
+          <div class="spinner-circle"></div>
+          <p style="margin-top:12px;color:#888;font-size:.85rem">데이터 수집 중...</p>
+        </div>
+
+        <div id="crawlStatsArea" style="display:none">
+          <div class="stats">
+            <div class="stat-box"><div class="num" id="totalCount">0</div><div class="lbl">총 수집</div></div>
+            <div class="stat-box"><div class="num" id="filteredCount">0</div><div class="lbl">표시 중</div></div>
+            <div class="stat-box"><div class="num" id="selectedCount">0</div><div class="lbl">분석 선택</div></div>
+            <div class="stat-box"><div class="num" id="avgPrice">-</div><div class="lbl">평균 주당</div></div>
+          </div>
+          <div class="filter-bar">
+            <button class="btn btn-secondary" id="selectAllBtn" onclick="toggleSelectAll()">전체 선택</button>
+            <input type="text" id="searchInput" placeholder="지역, 제목, 주소 검색..." oninput="filterRooms()"/>
+            <select id="filterSort" onchange="filterRooms()">
+              <option value="">정렬 없음</option>
+              <option value="price_asc">주당 낮은순</option>
+              <option value="price_desc">주당 높은순</option>
+              <option value="area_asc">면적 작은순</option>
+              <option value="area_desc">면적 큰순</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid" id="roomGrid"></div>
+        <div class="empty-state" id="crawlEmpty">
+          <div class="icon">🔍</div>
+          <p><strong>크롤링 시작</strong> 버튼을 눌러 매물을 불러오세요.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     TAB 2: 예약율 분석
+═══════════════════════════════════════════ -->
+<div id="analysisTab">
+  <!-- 비로그인 상태 -->
+  <div id="notLoggedIn" class="main" style="display:none">
+    <div class="login-banner">
+      <h2>🔐 로그인이 필요합니다</h2>
+      <p>33m2 계정으로 로그인하면 매물별 예약 현황을<br>자동으로 수집하고 분석할 수 있습니다.</p>
+      <button class="btn btn-primary" onclick="openLoginModal()" style="width:100%;padding:11px">로그인하기</button>
+    </div>
+  </div>
+
+  <!-- 로그인 상태: 결과 화면만 -->
+  <div id="loggedInAnalysis" style="display:none">
+    <div class="main">
+      <div class="error-box" id="analysisError"></div>
+
+      <!-- 컨트롤 + 상태배너 한 줄 통합 -->
+      <div class="analysis-toolbar">
+        <label class="toggle-label" title="같은 도로명 주소(층 제외) 매물을 그룹으로 묶어 표시합니다">
+          <input type="checkbox" id="groupByBuilding" onchange="onGroupToggle()"/>
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          🏢 도로명 그룹
+        </label>
+        <button class="btn btn-secondary" onclick="clearAnalysis()" style="font-size:.8rem;padding:6px 12px">결과 초기화</button>
+        <span class="toolbar-spacer"></span>
+        <span class="status-inline" id="analysisStatus"></span>
+      </div>
+
+      <!-- ── 수익분석 기본값 (접기 가능) ── -->
+      <div class="sim-panel collapsed" id="simPanel" style="display:none">
+        <button class="sim-panel-header" type="button" onclick="toggleSimPanel()" id="simPanelToggle">
+          <span class="sim-toggle-arrow">▶</span>
+          <span class="sim-panel-title">💡 수익분석 기본값</span>
+          <span class="sim-summary" id="simSummary">점유율 85% · 공과금 10만 · 비품비 3만</span>
+        </button>
+        <div class="sim-panel-body" id="simPanelBody">
+          <div class="sim-field">
+            <label>가정 점유율</label>
+            <input type="range" id="globalOccupancy" min="0" max="100" step="1" value="85"
+                   oninput="updateGlobalParam()"/>
+            <span class="sim-val" id="globalOccupancyVal">85%</span>
+          </div>
+          <div class="sim-field">
+            <label>공과금 (월)</label>
+            <input type="number" id="globalUtility" value="100000" step="10000" min="0"
+                   oninput="updateGlobalParam()"/>
+          </div>
+          <div class="sim-field">
+            <label>비품비 (월)</label>
+            <input type="number" id="globalSupplies" value="30000" step="10000" min="0"
+                   oninput="updateGlobalParam()"/>
+          </div>
+          <p style="font-size:.72rem;color:#666;flex-basis:100%;margin:0">
+            💡 보증금/월세/관리비/투자비는 매물별 [💰 분석] 버튼에서 입력
+          </p>
+        </div>
+      </div>
+
+      <div class="spinner" id="analysisSpinner">
+        <div class="spinner-circle"></div>
+        <p style="margin-top:12px;color:#888;font-size:.85rem">
+          매물별 달력을 수집 중입니다...<br>
+          <span style="font-size:.78rem">매물 1개당 약 30~60초 소요됩니다.</span>
+        </p>
+      </div>
+      <div class="analysis-grid" id="analysisGrid"></div>
+      <div class="empty-state" id="analysisEmpty">
+        <div class="icon">📊</div>
+        <p>매물 크롤링 탭에서 매물을 선택하고 사이드바의 <strong>예약율 분석 시작</strong>을 눌러주세요.</p>
+      </div>
+    </div><!-- /main -->
+  </div><!-- /loggedInAnalysis -->
+</div><!-- /analysisTab -->
+
+<!-- ── 이미지 호버 미리보기 (전역 단일) ── -->
+<div id="previewPopup"><img src="" alt=""/></div>
+
+<!-- ── 달력 호버 팝업 (월별 예약율 셀) ── -->
+<div id="calendarPopup"></div>
+
+<!-- ── 이미지 라이트박스 ── -->
+<div class="lightbox-overlay" id="lightboxOverlay">
+  <button class="lightbox-close" onclick="closeImageLightbox()" aria-label="닫기">✕</button>
+  <div class="lightbox-content" onclick="event.stopPropagation()">
+    <img id="lightboxImg" src="" alt=""/>
+    <div class="lightbox-info">
+      <h3 id="lightboxTitle"></h3>
+      <p id="lightboxLoc"></p>
+      <a id="lightboxLink" href="#" target="_blank" rel="noopener">상세 페이지 열기 →</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── 수익 분석 모달 (매물별 매출/투자금 회수 계산기) ── -->
+<div class="profit-modal-overlay" id="profitModal">
+  <div class="profit-modal" onclick="event.stopPropagation()">
+    <div class="profit-modal-header">
+      <div style="flex:1;min-width:0">
+        <h3 id="profitTitle"></h3>
+        <p id="profitSubtitle"></p>
+      </div>
+      <button class="profit-modal-close" onclick="closeProfitModal()" aria-label="닫기">✕</button>
+    </div>
+    <div class="profit-modal-body">
+      <div class="profit-card">
+        <div class="profit-card-header">📊 매출 계산기</div>
+        <div id="profitRevenueBody"></div>
+      </div>
+      <div class="profit-card">
+        <div class="profit-card-header">💰 투자금 회수 시뮬레이션</div>
+        <div id="profitInvestBody"></div>
+      </div>
+    </div>
+    <div class="profit-modal-footer">
+      <div class="footer-grp">
+        <button class="btn btn-secondary" onclick="resetProfitModal()" style="font-size:.78rem;padding:6px 12px">🗑 초기화</button>
+        <button class="btn btn-secondary" onclick="copyProfitToAll()" style="font-size:.78rem;padding:6px 12px"
+                title="현재 매물의 모든 입력값을 다른 매물에도 1회 복사">📋 모든 매물에 적용</button>
+        <button class="btn btn-secondary" onclick="saveInvestmentsAsDefault()" style="font-size:.78rem;padding:6px 12px"
+                title="현재 투자 항목을 기본값으로 저장 — 새 매물 분석 시 자동 적용">💾 항목을 기본값으로</button>
+        <button class="btn btn-secondary" onclick="resetDefaultInvestments()" style="font-size:.78rem;padding:6px 12px"
+                title="저장한 기본값 지우고 출시 기본값으로 복원">↺ 기본값 초기화</button>
+      </div>
+      <div class="footer-grp">
+        <button class="btn btn-primary" onclick="closeProfitModal()" style="font-size:.85rem;padding:7px 18px">완료</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 로그인 모달 ── -->
+<div class="modal-overlay" id="loginModal">
+  <div class="modal">
+    <h2>🔐 33m2 로그인</h2>
+    <p>33m2 계정 정보를 입력하세요. 비밀번호는 서버에 저장되지 않습니다.</p>
+    <div class="login-form">
+      <input type="email" id="loginEmail" placeholder="이메일 주소"/>
+      <input type="password" id="loginPw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doLogin()"/>
+      <div class="login-err" id="loginErr"></div>
+      <button class="btn btn-primary" id="loginSubmitBtn" onclick="doLogin()" style="padding:11px">로그인</button>
+      <button class="btn btn-secondary" onclick="closeLoginModal()" style="padding:9px">취소</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── 전역 상태 ─────────────────────────────────── */
+let allRooms      = [];
+let selectedIds   = new Set();
+let loggedIn      = false;
+let userEmail     = '';
+let searchMode    = 'sort';   // 'sort' | 'keyword' | 'coord'
+let lastResults   = [];       // 분석 결과 캐시 (시뮬레이션 재계산용)
+let lastMonths    = [];       // 표시 중인 월 키 목록 (정렬 후 재렌더용)
+let currentSort   = { key: 'overall', dir: 'desc' };  // 정렬 상태
+let groupByBuilding = false;  // 건물별 묶기 (도로명 주소까지 같은 매물 그룹화)
+
+/* ── 수익분석 데이터 모델 (per-property + global defaults) ──────── */
+const PROFIT_DATA_KEY                = 'samsam2_profit_data';
+const PROFIT_DEFAULTS_KEY            = 'samsam2_profit_defaults';
+const PROFIT_DEFAULT_INVESTMENTS_KEY = 'samsam2_default_investments';
+
+// 출시 디폴트 (사용자가 커스텀 디폴트를 저장하지 않았을 때 사용)
+const DEFAULT_INVESTMENTS = [
+  { name: '가전',       value: 2000000 },
+  { name: '침대',       value: 200000 },
+  { name: '침구세트',   value: 100000 },
+  { name: '식탁세트',   value: 100000 },
+  { name: '조명',       value: 200000 },
+  { name: '소품',       value: 300000 },
+  { name: '수건/휴지',  value: 150000 },
+  { name: '식기',       value: 200000 },
+];
+
+// 사용자 커스텀 디폴트 (localStorage에 저장됨)
+let customDefaultInvestments = null;
+
+function loadCustomDefaultInvestments() {
+  try {
+    const raw = localStorage.getItem(PROFIT_DEFAULT_INVESTMENTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) customDefaultInvestments = parsed;
+    }
+  } catch(e) {}
+}
+function getDefaultInvestments() {
+  const src = customDefaultInvestments || DEFAULT_INVESTMENTS;
+  return JSON.parse(JSON.stringify(src));
+}
+function saveCustomDefaultInvestments(items) {
+  customDefaultInvestments = JSON.parse(JSON.stringify(items));
+  try { localStorage.setItem(PROFIT_DEFAULT_INVESTMENTS_KEY, JSON.stringify(items)); } catch(e) {}
+}
+function clearCustomDefaultInvestments() {
+  customDefaultInvestments = null;
+  try { localStorage.removeItem(PROFIT_DEFAULT_INVESTMENTS_KEY); } catch(e) {}
+}
+
+// 글로벌 가정값 (모든 매물에 디폴트로 적용)
+const simParams = {
+  occupancy: 85,
+  utilityFee: 100000,
+  suppliesFee: 30000,
+};
+
+let profitDataAll  = {};   // { rid: { deposit, monthlyRent, mgmtFee, ..., investments[] } }
+let currentProfitRid = null;
+
+function loadProfitDataAll() {
+  try {
+    const raw = localStorage.getItem(PROFIT_DATA_KEY);
+    profitDataAll = raw ? JSON.parse(raw) : {};
+  } catch(e) { profitDataAll = {}; }
+}
+function saveProfitDataAll() {
+  try { localStorage.setItem(PROFIT_DATA_KEY, JSON.stringify(profitDataAll)); } catch(e){}
+}
+function getProfitData(rid) { return profitDataAll[String(rid)] || null; }
+function setProfitData(rid, data) {
+  profitDataAll[String(rid)] = data;
+  saveProfitDataAll();
+}
+
+function loadProfitDefaults() {
+  try {
+    const raw = localStorage.getItem(PROFIT_DEFAULTS_KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      simParams.occupancy   = d.occupancy   != null ? d.occupancy   : simParams.occupancy;
+      simParams.utilityFee  = d.utilityFee  != null ? d.utilityFee  : simParams.utilityFee;
+      simParams.suppliesFee = d.suppliesFee != null ? d.suppliesFee : simParams.suppliesFee;
+    }
+  } catch(e) {}
+}
+function saveProfitDefaults() {
+  try { localStorage.setItem(PROFIT_DEFAULTS_KEY, JSON.stringify(simParams)); } catch(e){}
+}
+
+// 매물별 effective 데이터 (저장된 값 + 글로벌 디폴트 fallback)
+function getEffectiveProfitData(rid, room) {
+  const stored = getProfitData(rid);
+  // 측정 예약률 (각 매물의 overall_rate에 자동 연결)
+  const measuredRate = (room && room.overall_rate != null)
+    ? Math.round(room.overall_rate * 10) / 10
+    : null;
+  const defaults = {
+    deposit:       0,
+    monthlyRent:   0,
+    mgmtFee:       0,
+    utilityFee:    simParams.utilityFee,
+    suppliesFee:   simParams.suppliesFee,
+    // 예약률은 측정값(overall_rate) 우선, 없으면 글로벌 디폴트
+    occupancy:        measuredRate != null ? measuredRate : simParams.occupancy,
+    avgBookingWeeks:  1,
+    investments:   getDefaultInvestments(),  // 사용자 커스텀 디폴트가 있으면 그것을, 없으면 출시 기본값
+  };
+  if (!stored) return defaults;
+  return {
+    deposit:         stored.deposit         !== undefined ? stored.deposit         : defaults.deposit,
+    monthlyRent:     stored.monthlyRent     !== undefined ? stored.monthlyRent     : defaults.monthlyRent,
+    mgmtFee:         stored.mgmtFee         !== undefined ? stored.mgmtFee         : defaults.mgmtFee,
+    utilityFee:      stored.utilityFee      !== undefined ? stored.utilityFee      : defaults.utilityFee,
+    suppliesFee:     stored.suppliesFee     !== undefined ? stored.suppliesFee     : defaults.suppliesFee,
+    // 예약률은 항상 측정값 사용 (stored 무시) — 측정값과 자동 연결
+    occupancy:       defaults.occupancy,
+    avgBookingWeeks: stored.avgBookingWeeks !== undefined ? stored.avgBookingWeeks : defaults.avgBookingWeeks,
+    investments:     stored.investments     || defaults.investments,
+  };
+}
+
+// 사용자가 한 번이라도 입력한 경우 true (월세나 보증금 중 하나라도 있으면)
+function isProfitFilled(rid) {
+  const d = getProfitData(rid);
+  if (!d) return false;
+  return (d.monthlyRent > 0) || (d.deposit > 0);
+}
+
+/* ── 수익분석 계산 ────────────────────────────────
+ * 단기임대 비즈니스 모델 (전대):
+ *   B(나) ← C(단기 임차인): 1주 임대료, 1주 관리비, 청소비(회당), 보증금(C, 회수)
+ *   B(나) → A(임대인):     보증금(A, 회수), 월세, 관리비
+ *   B 운영비:              공과금, 비품비
+ */
+function calcProfit(data, room) {
+  // C로부터 받는 (자동, API)
+  const weeklyRent     = (room && room.using_fee) || 0;
+  const weeklyMgmt     = (room && room.mgmt_fee)  || 0;
+  const cleaningFeeC   = (room && room.detail && room.detail.cleaning_fee) || 0;
+  const tenantDeposit  = (room && room.detail && room.detail.deposit)      || 0;
+
+  const occ              = data.occupancy || 0;
+  const avgBookingWeeks  = Math.max(0.5, data.avgBookingWeeks || 1);
+  const weeksPerMonth    = 4.34;
+  const bookedWeeks      = weeksPerMonth * (occ / 100);
+  const bookings         = bookedWeeks / avgBookingWeeks;
+
+  // 매출 (월)
+  const rentRevenue     = weeklyRent * bookedWeeks;
+  const mgmtRevenue     = weeklyMgmt * bookedWeeks;
+  const cleaningRevenue = cleaningFeeC * bookings;
+  const monthlyRevenue  = rentRevenue + mgmtRevenue + cleaningRevenue;
+
+  // 지출 (월)
+  const landlordExpense = (data.monthlyRent || 0) + (data.mgmtFee || 0);   // A에게
+  const operatingExpense = (data.utilityFee || 0) + (data.suppliesFee || 0); // 운영
+  const totalExpense     = landlordExpense + operatingExpense;
+
+  const monthlyProfit  = monthlyRevenue - totalExpense;
+  // 월 수익률 = 월 순이익 / 월 매출 × 100 (매출 대비 마진율)
+  const monthlyProfitRate = monthlyRevenue > 0 ? (monthlyProfit / monthlyRevenue * 100) : null;
+
+  // 투자
+  const initialInvestment = (data.investments || [])
+    .reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+  const totalInvestment   = (data.deposit || 0) + initialInvestment;
+  const yearlyProfit      = monthlyProfit * 12;
+  const initialRecoveryMonths = monthlyProfit > 0 ? initialInvestment / monthlyProfit : null;
+  const totalRecoveryMonths   = monthlyProfit > 0 ? totalInvestment   / monthlyProfit : null;
+  const yearlyRoi             = totalInvestment > 0 ? (yearlyProfit / totalInvestment * 100) : null;
+
+  return {
+    weeklyRent, weeklyMgmt, cleaningFeeC, tenantDeposit,
+    occupancy: occ, avgBookingWeeks, bookedWeeks, bookings,
+    rentRevenue, mgmtRevenue, cleaningRevenue, monthlyRevenue,
+    landlordExpense, operatingExpense, totalExpense,
+    monthlyProfit, monthlyProfitRate,
+    initialInvestment, totalInvestment, yearlyProfit,
+    initialRecoveryMonths, totalRecoveryMonths, yearlyRoi,
+  };
+}
+
+function fmtWon(won) {
+  if (won == null || isNaN(won)) return '-';
+  const abs = Math.abs(won);
+  const man = Math.round(abs / 10000);
+  const str = man >= 10000 ? `${(man/10000).toFixed(1)}억원` : `${man.toLocaleString()}만원`;
+  return won < 0 ? `-${str}` : str;
+}
+
+/* ── 글로벌 기본값 패널 ────────────────────────── */
+function toggleSimPanel() {
+  const p = document.getElementById('simPanel');
+  if (p) p.classList.toggle('collapsed');
+}
+
+function updateSimSummary() {
+  const el = document.getElementById('simSummary');
+  if (!el) return;
+  el.textContent =
+    `점유율 ${simParams.occupancy}% · ` +
+    `공과금 ${(simParams.utilityFee/10000).toFixed(0)}만 · ` +
+    `비품비 ${(simParams.suppliesFee/10000).toFixed(0)}만`;
+}
+
+function updateGlobalParam() {
+  const occEl = document.getElementById('globalOccupancy');
+  const utEl  = document.getElementById('globalUtility');
+  const spEl  = document.getElementById('globalSupplies');
+  if (occEl) simParams.occupancy   = parseInt(occEl.value);
+  if (utEl)  simParams.utilityFee  = parseInt(utEl.value)  || 0;
+  if (spEl)  simParams.suppliesFee = parseInt(spEl.value)  || 0;
+
+  const occVal = document.getElementById('globalOccupancyVal');
+  if (occVal) occVal.textContent = simParams.occupancy + '%';
+
+  saveProfitDefaults();
+  updateSimSummary();
+
+  // 표의 수익분석 셀만 in-place 갱신
+  updateProfitCellsInPlace();
+}
+
+/* ── 표의 수익분석 셀 in-place 갱신 ────────────── */
+function updateProfitCellsInPlace() {
+  document.querySelectorAll('tr[data-rid]').forEach(row => {
+    const rid = row.dataset.rid;
+    const r   = lastResults.find(x => String(x.rid) === String(rid));
+    if (!r || r.error) return;
+
+    const data    = getEffectiveProfitData(rid, r);
+    const sim     = calcProfit(data, r);
+    const filled  = isProfitFilled(rid);
+
+    const profCell = row.querySelector('.cell-monthly-profit');
+    const roiCell  = row.querySelector('.cell-yearly-roi');
+    const recCell  = row.querySelector('.cell-recovery');
+    if (profCell) profCell.innerHTML = renderProfitCellContent(sim, filled);
+    if (roiCell)  roiCell.innerHTML  = renderRoiCellContent(sim, filled);
+    if (recCell)  recCell.innerHTML  = renderRecoveryCellContent(sim, filled, rid);
+  });
+}
+
+function renderProfitCellContent(sim, filled) {
+  if (!filled) return '<span style="color:#aaa">—</span>';
+  const pCls = sim.monthlyProfit > 0 ? 'rate-low' : sim.monthlyProfit < 0 ? 'rate-high' : '';
+  const rCls = sim.monthlyProfitRate != null && sim.monthlyProfitRate > 0 ? 'rate-low'
+             : sim.monthlyProfitRate != null && sim.monthlyProfitRate < 0 ? 'rate-high' : '';
+  const rateStr = sim.monthlyProfitRate != null ? sim.monthlyProfitRate.toFixed(1) + '%' : '—';
+  return `
+    <div class="${pCls}" style="font-weight:700;font-size:.92rem">${fmtWon(sim.monthlyProfit)}</div>
+    <div class="${rCls}" style="font-size:.73rem;font-weight:600;margin-top:2px;opacity:.85">${rateStr}</div>
+  `;
+}
+function renderRoiCellContent(sim, filled) {
+  if (!filled) return '<span style="color:#aaa">—</span>';
+  const pCls = sim.yearlyProfit > 0 ? 'rate-low' : sim.yearlyProfit < 0 ? 'rate-high' : '';
+  const rCls = sim.yearlyRoi != null && sim.yearlyRoi > 0 ? 'rate-low'
+             : sim.yearlyRoi != null && sim.yearlyRoi < 0 ? 'rate-high' : '';
+  const roiStr = sim.yearlyRoi != null ? sim.yearlyRoi.toFixed(1) + '%' : '—';
+  return `
+    <div class="${pCls}" style="font-weight:700;font-size:.92rem">${fmtWon(sim.yearlyProfit)}</div>
+    <div class="${rCls}" style="font-size:.73rem;font-weight:600;margin-top:2px;opacity:.85">${roiStr}</div>
+  `;
+}
+function renderRecoveryCellContent(sim, filled, rid) {
+  if (!filled) {
+    return `<button class="profit-analyze-btn" onclick="event.stopPropagation();openProfitModal('${esc(rid)}')">💰 분석</button>`;
+  }
+  if (sim.totalRecoveryMonths == null) return '<span class="rate-high">불가</span>';
+  const initStr = sim.initialRecoveryMonths != null ? sim.initialRecoveryMonths.toFixed(1) + '개월' : '—';
+  const totStr  = sim.totalRecoveryMonths.toFixed(1) + '개월';
+  return `
+    <div style="font-size:.78rem;color:#888;font-weight:500">초기 ${initStr}</div>
+    <div style="font-weight:700;font-size:.92rem;margin-top:2px">총 ${totStr}</div>
+  `;
+}
+
+/* ── 수익분석 모달 ────────────────────────────── */
+function openProfitModal(rid) {
+  const room = lastResults.find(r => String(r.rid) === String(rid));
+  if (!room) return;
+  currentProfitRid = String(rid);
+
+  document.getElementById('profitTitle').textContent = room.title || '';
+  const addr = (room.detail && room.detail.full_address)
+            || [room.province, room.town].filter(Boolean).join(' ');
+  document.getElementById('profitSubtitle').textContent = `📍 ${addr}`;
+
+  renderProfitModal();
+  document.getElementById('profitModal').classList.add('open');
+}
+
+function closeProfitModal() {
+  document.getElementById('profitModal').classList.remove('open');
+  const wasRid = currentProfitRid;
+  currentProfitRid = null;
+  // 모달 닫힐 때 표 셀 갱신
+  if (wasRid && lastResults.length) updateProfitCellsInPlace();
+}
+
+function renderProfitModal() {
+  if (!currentProfitRid) return;
+  const room = lastResults.find(r => String(r.rid) === String(currentProfitRid));
+  if (!room) return;
+  const data = getEffectiveProfitData(currentProfitRid, room);
+  const sim  = calcProfit(data, room);
+
+  // 매출 계산기 (좌측)
+  document.getElementById('profitRevenueBody').innerHTML = `
+    <div class="profit-row section-divider">📥 단기 임차인 C로부터 받는 금액 (자동)</div>
+    <div class="profit-row auto-row">
+      <span class="pr-label">1주 임대료</span>
+      <span class="pr-value">${fmtWon(sim.weeklyRent)}</span>
+    </div>
+    <div class="profit-row auto-row">
+      <span class="pr-label">1주 관리비</span>
+      <span class="pr-value">${fmtWon(sim.weeklyMgmt)}</span>
+    </div>
+    <div class="profit-row auto-row">
+      <span class="pr-label">청소비 (회당)</span>
+      <span class="pr-value">${fmtWon(sim.cleaningFeeC)}</span>
+    </div>
+    <div class="profit-row auto-row" style="opacity:.7">
+      <span class="pr-label">보증금 (단기, 회수)</span>
+      <span class="pr-value">${fmtWon(sim.tenantDeposit)}</span>
+    </div>
+
+    <div class="profit-row section-divider">📤 임대인 A에게 지급</div>
+    <div class="profit-row">
+      <span class="pr-label">보증금 <span style="font-size:.7rem;color:#888">(회수 대상)</span></span>
+      <input type="number" step="100000" min="0" value="${data.deposit||0}"
+             oninput="updateProfitField('deposit', this.value)"/>
+    </div>
+    <div class="profit-row">
+      <span class="pr-label">월세</span>
+      <input type="number" step="50000" min="0" value="${data.monthlyRent||0}"
+             oninput="updateProfitField('monthlyRent', this.value)"/>
+    </div>
+    <div class="profit-row">
+      <span class="pr-label">관리비</span>
+      <input type="number" step="10000" min="0" value="${data.mgmtFee||0}"
+             oninput="updateProfitField('mgmtFee', this.value)"/>
+    </div>
+
+    <div class="profit-row section-divider">📤 운영비 (월)</div>
+    <div class="profit-row">
+      <span class="pr-label">공과금 (전기·가스·수도)</span>
+      <input type="number" step="10000" min="0" value="${data.utilityFee||0}"
+             oninput="updateProfitField('utilityFee', this.value)"/>
+    </div>
+    <div class="profit-row">
+      <span class="pr-label">비품비 (예비비)</span>
+      <input type="number" step="10000" min="0" value="${data.suppliesFee||0}"
+             oninput="updateProfitField('suppliesFee', this.value)"/>
+    </div>
+
+    <div class="profit-row section-divider">⚙️ 가정값</div>
+    <div class="profit-row auto-row">
+      <span class="pr-label">예약률 (전체 예약율과 연결)</span>
+      <span class="pr-value">${data.occupancy}%</span>
+    </div>
+    <div class="profit-row">
+      <span class="pr-label">평균 예약 기간</span>
+      <input type="number" step="1" min="1" max="12" value="${data.avgBookingWeeks||1}"
+             oninput="updateProfitField('avgBookingWeeks', this.value)" style="width:80px"/>
+      <span style="color:#888;font-size:.78rem">주</span>
+    </div>
+    <div class="profit-row auto-row">
+      <span class="pr-label">예약주 (월)</span>
+      <span class="pr-value" id="pr-booked-weeks">${sim.bookedWeeks.toFixed(2)}주</span>
+    </div>
+    <div class="profit-row auto-row">
+      <span class="pr-label">예약 건수 (월)</span>
+      <span class="pr-value" id="pr-bookings-count">${sim.bookings.toFixed(2)}회</span>
+    </div>
+
+    <div class="profit-row section-divider">💵 매출 (월)</div>
+    <div class="profit-row">
+      <span class="pr-label">임대료 매출</span>
+      <span class="pr-value" id="pr-rev-rent">${fmtWon(sim.rentRevenue)}</span>
+    </div>
+    <div class="profit-row">
+      <span class="pr-label">관리비 매출</span>
+      <span class="pr-value" id="pr-rev-mgmt">${fmtWon(sim.mgmtRevenue)}</span>
+    </div>
+    <div class="profit-row">
+      <span class="pr-label">청소비 매출</span>
+      <span class="pr-value" id="pr-rev-cleaning">${fmtWon(sim.cleaningRevenue)}</span>
+    </div>
+    <div class="profit-row result-row">
+      <span class="pr-label">월 매출 합계</span>
+      <span class="pr-value" id="pr-rev-total">${fmtWon(sim.monthlyRevenue)}</span>
+    </div>
+
+    <div class="profit-row section-divider">💸 지출 (월)</div>
+    <div class="profit-row">
+      <span class="pr-label">임대인 A 지급 (월세+관리비)</span>
+      <span class="pr-value" id="pr-exp-landlord">${fmtWon(sim.landlordExpense)}</span>
+    </div>
+    <div class="profit-row">
+      <span class="pr-label">운영비 (공과금+비품비)</span>
+      <span class="pr-value" id="pr-exp-operating">${fmtWon(sim.operatingExpense)}</span>
+    </div>
+    <div class="profit-row result-row">
+      <span class="pr-label">월 지출 합계</span>
+      <span class="pr-value" id="pr-exp-total">${fmtWon(sim.totalExpense)}</span>
+    </div>
+
+    <div class="profit-row profit-final ${sim.monthlyProfit > 0 ? 'positive' : 'negative'}" id="pr-profit-final-left">
+      <span class="pr-label">월 순이익</span>
+      <span class="pr-value" id="pr-profit-monthly-l">${fmtWon(sim.monthlyProfit)}</span>
+    </div>
+  `;
+
+  // 투자금 회수 (우측)
+  const invItemsHtml = (data.investments || []).map((item, idx) => `
+    <div class="profit-investment-row">
+      <input type="text" value="${esc(item.name||'')}"
+             onchange="updateInvestmentItem(${idx}, 'name', this.value)"/>
+      <input type="number" step="50000" min="0" value="${item.value||0}"
+             oninput="updateInvestmentItem(${idx}, 'value', this.value)"/>
+      <button class="del-btn" onclick="removeInvestmentItem(${idx})" title="삭제">×</button>
+    </div>
+  `).join('');
+
+  document.getElementById('profitInvestBody').innerHTML = `
+    <div class="profit-row auto-row">
+      <span class="pr-label">보증금</span>
+      <span class="pr-value" id="pr-mirror-deposit">${fmtWon(data.deposit||0)}</span>
+    </div>
+    <div class="profit-row auto-row">
+      <span class="pr-label">월세</span>
+      <span class="pr-value" id="pr-mirror-rent">${fmtWon(data.monthlyRent||0)}</span>
+    </div>
+    <div class="profit-row auto-row">
+      <span class="pr-label">관리비</span>
+      <span class="pr-value" id="pr-mirror-mgmt">${fmtWon(data.mgmtFee||0)}</span>
+    </div>
+    <div class="profit-row section-divider">
+      초기 투자 (수정/추가/삭제 가능)
+      ${customDefaultInvestments ? '<span style="float:right;color:#27ae60;font-size:.65rem;font-weight:600">📌 사용자 기본값 적용 중</span>' : ''}
+    </div>
+    ${invItemsHtml}
+    <button class="profit-add-btn" onclick="addInvestmentItem()">+ 항목 추가</button>
+    <div class="profit-row section-divider">결과</div>
+    <div class="profit-row result-row">
+      <span class="pr-label">초기 투자비용</span>
+      <span class="pr-value" id="pr-inv-initial">${fmtWon(sim.initialInvestment)}</span>
+    </div>
+    <div class="profit-row result-row">
+      <span class="pr-label">총 투자금 (보증금 + 초기투자)</span>
+      <span class="pr-value" id="pr-inv-total">${fmtWon(sim.totalInvestment)}</span>
+    </div>
+    <div class="profit-row result-row">
+      <span class="pr-label">월 순이익</span>
+      <span class="pr-value" id="pr-profit-monthly-r">${fmtWon(sim.monthlyProfit)}</span>
+    </div>
+    <div class="profit-row result-row">
+      <span class="pr-label">연 순이익</span>
+      <span class="pr-value" id="pr-profit-yearly">${fmtWon(sim.yearlyProfit)}</span>
+    </div>
+    <div class="profit-row result-row">
+      <span class="pr-label">초기투자비용 회수기간</span>
+      <span class="pr-value" id="pr-recovery-initial">${sim.initialRecoveryMonths != null ? sim.initialRecoveryMonths.toFixed(2) + ' 개월' : '—'}</span>
+    </div>
+    <div class="profit-row result-row">
+      <span class="pr-label">총 투자금 회수기간</span>
+      <span class="pr-value" id="pr-recovery-total">${sim.totalRecoveryMonths != null ? sim.totalRecoveryMonths.toFixed(2) + ' 개월' : '—'}</span>
+    </div>
+    <div class="profit-row profit-final ${sim.yearlyRoi > 0 ? 'positive' : 'negative'}" id="pr-profit-final-right">
+      <span class="pr-label">연 수익률</span>
+      <span class="pr-value" id="pr-roi-yearly">${sim.yearlyRoi != null ? sim.yearlyRoi.toFixed(2) + '%' : '—'}</span>
+    </div>
+  `;
+}
+
+/* 입력 변경 시 결과 셀만 부분 갱신 (입력 필드는 그대로 — 포커스 유지) */
+function updateProfitDisplay() {
+  if (!currentProfitRid) return;
+  const room = lastResults.find(r => String(r.rid) === currentProfitRid);
+  if (!room) return;
+  const data = getEffectiveProfitData(currentProfitRid, room);
+  const sim  = calcProfit(data, room);
+
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+  // 좌측: 매출 계산기
+  set('pr-booked-weeks',    sim.bookedWeeks.toFixed(2) + '주');
+  set('pr-bookings-count',  sim.bookings.toFixed(2) + '회');
+  set('pr-rev-rent',        fmtWon(sim.rentRevenue));
+  set('pr-rev-mgmt',        fmtWon(sim.mgmtRevenue));
+  set('pr-rev-cleaning',    fmtWon(sim.cleaningRevenue));
+  set('pr-rev-total',       fmtWon(sim.monthlyRevenue));
+  set('pr-exp-landlord',    fmtWon(sim.landlordExpense));
+  set('pr-exp-operating',   fmtWon(sim.operatingExpense));
+  set('pr-exp-total',       fmtWon(sim.totalExpense));
+  set('pr-profit-monthly-l',fmtWon(sim.monthlyProfit));
+  const pfL = document.getElementById('pr-profit-final-left');
+  if (pfL) {
+    pfL.classList.toggle('positive', sim.monthlyProfit > 0);
+    pfL.classList.toggle('negative', sim.monthlyProfit < 0);
+  }
+
+  // 우측: 투자금 회수 (보증금/월세/관리비 미러 + 결과)
+  set('pr-mirror-deposit',  fmtWon(data.deposit||0));
+  set('pr-mirror-rent',     fmtWon(data.monthlyRent||0));
+  set('pr-mirror-mgmt',     fmtWon(data.mgmtFee||0));
+  set('pr-inv-initial',     fmtWon(sim.initialInvestment));
+  set('pr-inv-total',       fmtWon(sim.totalInvestment));
+  set('pr-profit-monthly-r',fmtWon(sim.monthlyProfit));
+  set('pr-profit-yearly',   fmtWon(sim.yearlyProfit));
+  set('pr-recovery-initial',sim.initialRecoveryMonths != null ? sim.initialRecoveryMonths.toFixed(2) + ' 개월' : '—');
+  set('pr-recovery-total',  sim.totalRecoveryMonths   != null ? sim.totalRecoveryMonths.toFixed(2)   + ' 개월' : '—');
+  set('pr-roi-yearly',      sim.yearlyRoi != null ? sim.yearlyRoi.toFixed(2) + '%' : '—');
+  const pfR = document.getElementById('pr-profit-final-right');
+  if (pfR) {
+    pfR.classList.toggle('positive', sim.yearlyRoi != null && sim.yearlyRoi > 0);
+    pfR.classList.toggle('negative', sim.yearlyRoi != null && sim.yearlyRoi <= 0);
+  }
+}
+
+function updateProfitField(field, value) {
+  if (!currentProfitRid) return;
+  const room   = lastResults.find(r => String(r.rid) === currentProfitRid);
+  const stored = getProfitData(currentProfitRid) || {};
+  const data   = { ...getEffectiveProfitData(currentProfitRid, room), ...stored };
+  data[field]  = Number(value) || 0;
+  setProfitData(currentProfitRid, data);
+  // 결과 셀만 갱신 → 입력 필드의 포커스 유지 (실시간 반영)
+  updateProfitDisplay();
+}
+
+function updateInvestmentItem(idx, field, value) {
+  if (!currentProfitRid) return;
+  const room   = lastResults.find(r => String(r.rid) === currentProfitRid);
+  const stored = getProfitData(currentProfitRid) || {};
+  const data   = { ...getEffectiveProfitData(currentProfitRid, room), ...stored };
+  if (!data.investments) data.investments = getDefaultInvestments();
+  data.investments = [...data.investments];
+  if (!data.investments[idx]) data.investments[idx] = { name: '', value: 0 };
+  data.investments[idx] = { ...data.investments[idx] };
+  data.investments[idx][field] = field === 'value' ? Number(value) || 0 : value;
+  setProfitData(currentProfitRid, data);
+  // 항목 값 변경은 결과만 갱신하면 됨 (이름 변경은 표시 영향 없음)
+  updateProfitDisplay();
+}
+
+function addInvestmentItem() {
+  if (!currentProfitRid) return;
+  const room   = lastResults.find(r => String(r.rid) === currentProfitRid);
+  const stored = getProfitData(currentProfitRid) || {};
+  const data   = { ...getEffectiveProfitData(currentProfitRid, room), ...stored };
+  data.investments = [...(data.investments || []), { name: '', value: 0 }];
+  setProfitData(currentProfitRid, data);
+  renderProfitModal();
+}
+
+function removeInvestmentItem(idx) {
+  if (!currentProfitRid) return;
+  const room   = lastResults.find(r => String(r.rid) === currentProfitRid);
+  const stored = getProfitData(currentProfitRid) || {};
+  const data   = { ...getEffectiveProfitData(currentProfitRid, room), ...stored };
+  data.investments = (data.investments || []).filter((_, i) => i !== idx);
+  setProfitData(currentProfitRid, data);
+  renderProfitModal();
+}
+
+function resetProfitModal() {
+  if (!currentProfitRid) return;
+  if (!confirm('이 매물의 입력값을 모두 초기화하시겠습니까?')) return;
+  delete profitDataAll[currentProfitRid];
+  saveProfitDataAll();
+  renderProfitModal();
+}
+
+function copyProfitToAll() {
+  if (!currentProfitRid) return;
+  const stored = getProfitData(currentProfitRid);
+  if (!stored) { alert('현재 매물의 입력값이 없습니다. 먼저 보증금/월세 등을 입력하세요.'); return; }
+  const cnt = lastResults.filter(r => r.rid && !r.error).length;
+  if (!confirm(`현재 입력값을 모든 매물(${cnt}개)에 적용하시겠습니까?\n(보증금/월세/관리비/공과금/비품비/투자비 모두)`)) return;
+  lastResults.forEach(r => {
+    if (r.rid && !r.error) {
+      profitDataAll[String(r.rid)] = JSON.parse(JSON.stringify(stored));
+    }
+  });
+  saveProfitDataAll();
+  alert(`${cnt}개 매물에 적용되었습니다.`);
+}
+
+/* 현재 매물의 투자 항목을 "기본값"으로 저장 → 새로 분석하는 매물에 자동 적용 */
+function saveInvestmentsAsDefault() {
+  if (!currentProfitRid) return;
+  const room  = lastResults.find(r => String(r.rid) === currentProfitRid);
+  const data  = getEffectiveProfitData(currentProfitRid, room);
+  const items = (data.investments || []).filter(i => (i.name || '').trim() || (Number(i.value) || 0) > 0);
+  if (!items.length) { alert('저장할 투자 항목이 없습니다.'); return; }
+  const total = items.reduce((s, i) => s + (Number(i.value) || 0), 0);
+  const preview = items.map(i => `  • ${i.name || '(이름 없음)'}: ${fmtWon(i.value)}`).join('\n');
+  if (!confirm(
+    `현재 투자 항목 ${items.length}개를 "기본값"으로 저장합니다.\n` +
+    `앞으로 새로 분석하는 모든 매물의 시작값이 됩니다.\n\n` +
+    preview + `\n\n합계: ${fmtWon(total)}\n\n진행하시겠습니까?`
+  )) return;
+  saveCustomDefaultInvestments(items);
+  alert('기본 투자 항목이 저장되었습니다.\n다음에 새로 분석하는 매물에 자동 적용됩니다.');
+}
+
+/* 사용자 커스텀 디폴트를 지우고 출시 기본값으로 되돌림 */
+function resetDefaultInvestments() {
+  if (!customDefaultInvestments) {
+    alert('이미 출시 기본값을 사용 중입니다.');
+    return;
+  }
+  if (!confirm('저장한 기본 투자 항목을 지우고 출시 기본값(8개)으로 되돌리시겠습니까?\n(이미 분석한 매물들의 항목은 영향 없음)')) return;
+  clearCustomDefaultInvestments();
+  alert('출시 기본값으로 복원되었습니다.');
+}
+
+/* ── 검색 방식 전환 ─────────────────────────────── */
+function setSearchMode(mode) {
+  searchMode = mode;
+  ['sort','keyword','coord'].forEach(m => {
+    const btn = document.getElementById(`modeBtn-${m}`);
+    if (btn) btn.classList.toggle('active', m === mode);
+    const el = document.getElementById(`mode${m.charAt(0).toUpperCase()+m.slice(1)}`);
+    if (el) el.style.display = (m === mode) ? 'flex' : 'none';
+  });
+}
+
+/* ── 좌표 URL 파싱 ──────────────────────────────── */
+function parseCoordUrl(url) {
+  try {
+    const u = new URL(url.trim());
+    const lat  = u.searchParams.get('lat');
+    const lng  = u.searchParams.get('lng');
+    const zoom = u.searchParams.get('zoomLevel') || u.searchParams.get('zoom');
+    if (!lat || !lng) return null;
+    return { lat: parseFloat(lat), lng: parseFloat(lng), zoom: zoom ? parseInt(zoom) : null };
+  } catch(e) {
+    return null;
+  }
+}
+
+/* ── 탭 전환 ─────────────────────────────────── */
+function switchTab(tab) {
+  // 비로그인 시 분석 탭 진입 차단 → 로그인 모달 띄움
+  if (tab === 'analysis' && !loggedIn) {
+    openLoginModal();
+    return;
+  }
+
+  document.getElementById('crawlTab').style.display    = tab === 'crawl'    ? 'block' : 'none';
+  document.getElementById('analysisTab').style.display = tab === 'analysis' ? 'block' : 'none';
+  document.getElementById('tab-crawl').classList.toggle('active',    tab === 'crawl');
+  document.getElementById('tab-analysis').classList.toggle('active', tab === 'analysis');
+
+  if (tab === 'analysis') renderAnalysisTab();
+}
+
+function renderAnalysisTab() {
+  document.getElementById('notLoggedIn').style.display     = loggedIn ? 'none' : '';
+  document.getElementById('loggedInAnalysis').style.display = loggedIn ? ''    : 'none';
+  updateSelCountBadge();
+  updateAnalysisBtn();
+}
+
+/* ── 크롤링 ─────────────────────────────────── */
+async function startCrawl() {
+  // ── 파라미터 구성 ──
+  const sort     = document.getElementById('sort').value;
+  const pt       = document.getElementById('propertyType').value;
+  const maxPages = document.getElementById('maxPages').value;
+
+  let apiUrl = `/api/crawl?propertyTypes=${pt}&maxPages=${maxPages}&sort=${sort}&searchMode=${searchMode}`;
+
+  if (searchMode === 'keyword') {
+    const kw = document.getElementById('keywordInput').value.trim();
+    if (!kw) { showError('crawlError', '키워드를 입력하세요.'); return; }
+    apiUrl += `&keyword=${encodeURIComponent(kw)}`;
+  } else if (searchMode === 'coord') {
+    const raw = document.getElementById('coordInput').value.trim();
+    const coords = parseCoordUrl(raw);
+    if (!coords) {
+      showError('crawlError', '좌표 URL 형식이 올바르지 않습니다. (lat, lng 파라미터 필요)');
+      return;
+    }
+    apiUrl += `&lat=${coords.lat}&lng=${coords.lng}`;
+    if (coords.zoom) apiUrl += `&zoom=${coords.zoom}`;
+  }
+
+  // ── UI 초기화 ──
+  const btn = document.getElementById('crawlBtn');
+  btn.disabled = true; btn.textContent = '수집 중...';
+  document.getElementById('crawlSpinner').style.display   = 'block';
+  document.getElementById('crawlError').style.display     = 'none';
+  document.getElementById('crawlEmpty').style.display     = 'none';
+  document.getElementById('crawlStatsArea').style.display = 'none';
+  document.getElementById('roomGrid').innerHTML = '';
+
+  const modeLabel = searchMode === 'keyword' ? `키워드 "${document.getElementById('keywordInput').value.trim()}"` :
+                    searchMode === 'coord'   ? '좌표 검색' : '정렬순';
+  setStatus('crawlStatus', `${modeLabel} 수집 중...`, '#2c72c8');
+
+  try {
+    const res  = await fetch(apiUrl);
+    const data = await res.json();
+
+    document.getElementById('crawlSpinner').style.display = 'none';
+    btn.disabled = false; btn.textContent = '크롤링 시작';
+
+    if (!data.success) { showError('crawlError', data.error); return; }
+
+    allRooms = data.rooms || [];
+    document.getElementById('totalCount').textContent = allRooms.length;
+
+    const fees = allRooms.map(r => r.using_fee).filter(v => v > 0);
+    const avg  = fees.length ? Math.round(fees.reduce((a,b) => a+b,0) / fees.length / 10000) : 0;
+    document.getElementById('avgPrice').textContent = avg ? avg + '만' : '-';
+
+    document.getElementById('crawlStatsArea').style.display = 'block';
+    setStatus('crawlStatus', `✅ ${allRooms.length}개 매물 수집 완료 (${modeLabel})`, '#27ae60');
+    filterRooms();
+  } catch(e) {
+    document.getElementById('crawlSpinner').style.display = 'none';
+    btn.disabled = false; btn.textContent = '크롤링 시작';
+    showError('crawlError', '서버 오류: ' + e.message);
+  }
+}
+
+function filterRooms() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const s = document.getElementById('filterSort').value;
+  let list = allRooms.filter(r =>
+    !q || [r.title, r.address, r.province, r.town].some(x => (x||'').toLowerCase().includes(q))
+  );
+  if (s === 'price_asc')  list.sort((a,b) => (a.using_fee||Infinity) - (b.using_fee||Infinity));
+  if (s === 'price_desc') list.sort((a,b) => (b.using_fee||0) - (a.using_fee||0));
+  if (s === 'area_asc')   list.sort((a,b) => (a.pyeong||Infinity) - (b.pyeong||Infinity));
+  if (s === 'area_desc')  list.sort((a,b) => (b.pyeong||0) - (a.pyeong||0));
+  document.getElementById('filteredCount').textContent = list.length;
+  // 필터 변경 시 전체선택 버튼 텍스트 재계산
+  const allBtn = document.getElementById('selectAllBtn');
+  if (allBtn) {
+    const visibleIds = list.map(r => String(r.rid));
+    const allSel = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+    allBtn.textContent = allSel ? '전체 해제' : '전체 선택';
+  }
+  renderRoomCards(list);
+}
+
+function renderRoomCards(rooms) {
+  const grid  = document.getElementById('roomGrid');
+  const empty = document.getElementById('crawlEmpty');
+  if (!rooms.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  grid.innerHTML = rooms.map(r => roomCard(r)).join('');
+}
+
+function roomCard(r) {
+  const sel      = selectedIds.has(String(r.rid));
+  const imgHtml  = r.image
+    ? `<img src="${esc(r.image)}" alt="${esc(r.title)}" loading="lazy"
+          onerror="this.parentNode.innerHTML='<div class=card-img-placeholder>🏢</div>'">`
+    : `<div class="card-img-placeholder">🏢</div>`;
+  const badges   = [
+    r.is_new     ? '<span class="badge badge-new">NEW</span>'             : '',
+    r.super_host ? '<span class="badge badge-superhost">슈퍼호스트</span>' : '',
+    r.discount   ? `<span class="badge badge-discount">${r.discount}% 할인</span>` : '',
+  ].filter(Boolean).join('');
+  const loc = [r.province, r.town].filter(Boolean).join(' ');
+
+  return `
+    <div class="card selectable ${sel?'selected':''}" id="card-${r.rid}" data-rid="${r.rid}">
+      <div class="card-img-wrap">
+        ${imgHtml}
+        ${badges ? `<div class="badge-row">${badges}</div>` : ''}
+      </div>
+      <div class="card-body">
+        ${loc ? `<div class="card-location">📍 ${esc(loc)}</div>` : ''}
+        <div class="card-title">${esc(r.title)}</div>
+        <div class="card-price">${esc(r.price)}</div>
+        <div class="card-meta">
+          ${r.area   ? `<span class="meta-chip">📐 ${esc(r.area)}</span>`   : ''}
+          ${r.layout ? `<span class="meta-chip">🛏 ${esc(r.layout)}</span>` : ''}
+        </div>
+        ${r.address ? `<div class="card-address">${esc(r.address)}</div>` : ''}
+      </div>
+      <div class="card-check-wrap"><span class="check-circle">✓</span></div>
+    </div>`;
+}
+
+function toggleSelect(rid) {
+  const id = String(rid);
+  if (selectedIds.has(id)) selectedIds.delete(id);
+  else                      selectedIds.add(id);
+
+  // 카드 UI 업데이트 (.selected 클래스만 토글하면 .check-circle은 CSS로 자동 갱신)
+  const card = document.getElementById(`card-${rid}`);
+  if (card) card.classList.toggle('selected', selectedIds.has(id));
+
+  const selCountEl = document.getElementById('selectedCount');
+  if (selCountEl) selCountEl.textContent = selectedIds.size;
+
+  updateSelCountBadge();
+  updateAnalysisBtn();
+}
+
+function updateSelCountBadge() {
+  const el = document.getElementById('selCountBadge');
+  if (el) el.textContent = `선택 ${selectedIds.size}개`;
+}
+
+function updateAnalysisBtn() {
+  const btn = document.getElementById('startAnalysisBtn');
+  if (!btn) return;
+  btn.disabled = selectedIds.size === 0;
+  if (!loggedIn) {
+    btn.title = '로그인이 필요합니다 — 클릭 시 로그인 모달이 열립니다';
+  } else if (selectedIds.size === 0) {
+    btn.title = '왼쪽 매물 목록에서 분석할 매물을 선택하세요';
+  } else {
+    btn.title = '';
+  }
+}
+
+function toggleSelectAll() {
+  const cards = document.querySelectorAll('#roomGrid [data-rid]');
+  if (!cards.length) return;
+
+  const visibleIds = Array.from(cards).map(c => c.dataset.rid);
+  const allSelected = visibleIds.every(id => selectedIds.has(id));
+
+  if (allSelected) {
+    visibleIds.forEach(id => selectedIds.delete(id));
+    document.getElementById('selectAllBtn').textContent = '전체 선택';
+  } else {
+    visibleIds.forEach(id => selectedIds.add(id));
+    document.getElementById('selectAllBtn').textContent = '전체 해제';
+  }
+
+  cards.forEach(card => {
+    card.classList.toggle('selected', selectedIds.has(card.dataset.rid));
+  });
+
+  const selCountEl = document.getElementById('selectedCount');
+  if (selCountEl) selCountEl.textContent = selectedIds.size;
+
+  updateSelCountBadge();
+  updateAnalysisBtn();
+}
+
+function clearCrawl() {
+  allRooms = []; selectedIds.clear();
+  document.getElementById('roomGrid').innerHTML = '';
+  document.getElementById('crawlStatsArea').style.display = 'none';
+  document.getElementById('crawlStatus').style.display    = 'none';
+  document.getElementById('crawlError').style.display     = 'none';
+  document.getElementById('crawlEmpty').style.display     = 'block';
+  document.getElementById('searchInput').value = '';
+  document.getElementById('selectedCount').textContent = '0';
+  updateSelCountBadge(); updateAnalysisBtn();
+}
+
+/* ── 로그인 ─────────────────────────────────── */
+function openLoginModal() {
+  document.getElementById('loginModal').classList.add('open');
+  document.getElementById('loginEmail').focus();
+}
+function closeLoginModal() {
+  document.getElementById('loginModal').classList.remove('open');
+  document.getElementById('loginErr').textContent = '';
+}
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw    = document.getElementById('loginPw').value;
+  const btn   = document.getElementById('loginSubmitBtn');
+  const err   = document.getElementById('loginErr');
+
+  if (!email || !pw) { err.textContent = '이메일과 비밀번호를 모두 입력하세요.'; return; }
+
+  btn.disabled = true; btn.textContent = '로그인 중...';
+  err.textContent = '';
+
+  try {
+    const res  = await fetch('/api/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, password: pw})
+    });
+    const data = await res.json();
+
+    btn.disabled = false; btn.textContent = '로그인';
+
+    if (!data.success) { err.textContent = data.error || '로그인 실패'; return; }
+
+    loggedIn  = true;
+    userEmail = data.email;
+    closeLoginModal();
+    updateHeaderLogin();
+    renderAnalysisTab();
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '로그인';
+    err.textContent = '서버 오류: ' + e.message;
+  }
+}
+
+async function doLogout() {
+  await fetch('/api/logout', {method: 'POST'});
+  loggedIn  = false; userEmail = '';
+  updateHeaderLogin();
+  renderAnalysisTab();
+}
+
+function updateHeaderLogin() {
+  const statusEl = document.getElementById('loginStatus');
+  if (loggedIn) {
+    statusEl.innerHTML = `
+      <span class="user-badge">👤 ${esc(userEmail)}</span>
+      <button class="btn btn-secondary" onclick="doLogout()" style="font-size:.78rem;padding:5px 12px">로그아웃</button>`;
+  } else {
+    statusEl.innerHTML = `
+      <span id="guestLabel" style="opacity:.7;font-size:.8rem">비로그인 상태</span>
+      <button class="btn btn-secondary" id="loginBtn" onclick="openLoginModal()" style="font-size:.78rem;padding:5px 12px">로그인</button>`;
+  }
+  // 분석 탭 잠금 표시 토글
+  const analysisTabEl = document.getElementById('tab-analysis');
+  if (analysisTabEl) {
+    analysisTabEl.classList.toggle('locked', !loggedIn);
+    analysisTabEl.title = loggedIn ? '' : '로그인이 필요합니다';
+    const lockIcon = analysisTabEl.querySelector('.tab-lock');
+    if (lockIcon) lockIcon.style.display = loggedIn ? 'none' : '';
+  }
+  updateAnalysisBtn();
+  if (typeof syncHeaderHeight === 'function') syncHeaderHeight();
+}
+
+/* ── 예약율 분석 ──────────────────────────────── */
+async function startAnalysis() {
+  if (!loggedIn) { openLoginModal(); return; }
+  if (selectedIds.size === 0) {
+    showError('crawlError', '분석할 매물을 먼저 선택하세요.');
+    return;
+  }
+
+  const selectedRooms  = allRooms.filter(r => selectedIds.has(String(r.rid)));
+  const untilMonth     = parseInt(document.getElementById('untilMonth').value);
+  const untilYear      = parseInt(document.getElementById('untilYear').value);
+  const includeDisable = document.getElementById('includeDisable').checked;
+
+  // 분석 탭으로 자동 전환 (결과 화면을 미리 보여줌)
+  switchTab('analysis');
+
+  const btn = document.getElementById('startAnalysisBtn');
+  btn.disabled = true; btn.textContent = '분석 중...';
+  document.getElementById('analysisSpinner').style.display = 'block';
+  document.getElementById('analysisError').style.display   = 'none';
+  document.getElementById('analysisEmpty').style.display   = 'none';
+  document.getElementById('analysisGrid').innerHTML        = '';
+  setStatus('analysisStatus', `${selectedRooms.length}개 매물 달력 수집 중... (매물당 약 30~60초 소요)`, '#2c72c8');
+
+  try {
+    const res  = await fetch('/api/booking-analysis', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({rooms: selectedRooms, until_month: untilMonth, until_year: untilYear, include_disable: includeDisable})
+    });
+    const data = await res.json();
+
+    document.getElementById('analysisSpinner').style.display = 'none';
+    btn.disabled = false; btn.textContent = '📊 예약율 분석 시작';
+
+    if (!data.success) { showError('analysisError', data.error); return; }
+
+    const results = data.results || [];
+    setStatus('analysisStatus', `✅ ${results.length}개 매물 분석 완료`, '#27ae60');
+    renderAnalysisResults(results);
+  } catch(e) {
+    document.getElementById('analysisSpinner').style.display = 'none';
+    btn.disabled = false; btn.textContent = '📊 예약율 분석 시작';
+    showError('analysisError', '서버 오류: ' + e.message);
+  }
+}
+
+function renderAnalysisResults(results) {
+  const empty = document.getElementById('analysisEmpty');
+
+  if (!results.length) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  lastResults = results;
+  document.getElementById('simPanel').style.display = '';
+
+  // 모든 월 키 수집 (캐시)
+  const monthSet = new Set();
+  results.forEach(r => {
+    if (r.monthly) Object.keys(r.monthly).forEach(ym => monthSet.add(ym));
+  });
+  lastMonths = Array.from(monthSet).sort();
+
+  // 기본 정렬: 전체 예약율 내림차순 (이미 currentSort 기본값과 일치)
+  sortAndRender();
+}
+
+/* ── 정렬 키 추출 ──────────────────────────────── */
+function getAddressSortKey(r) {
+  const d = r.detail || {};
+  const fullAddr = d.full_address || [r.province, r.town].filter(Boolean).join(' ');
+  // 도로명 주소까지만: 끝의 "N층" 또는 "N호" 제거
+  return String(fullAddr).replace(/\s*\d+\s*(층|호|F)\s*$/i, '').trim();
+}
+
+function getSortValue(r, key) {
+  if (key === 'address') return getAddressSortKey(r);
+  if (key === 'floor')   return _floorNum(r);
+  if (key === 'area')    return (r.detail && r.detail.pyeong) || 0;
+  if (key === 'fee')     return r.using_fee || 0;
+  if (key === 'overall') return r.overall_rate || 0;
+  if (key.startsWith('month:')) {
+    const ym = key.slice(6);
+    const v = (r.monthly||{})[ym];
+    return v && !v.error ? (v.rate || 0) : -1;
+  }
+  if (key === 'monthlyProfit' || key === 'yearlyRoi' || key === 'recovery') {
+    const data = getEffectiveProfitData(r.rid, r);
+    const sim  = calcProfit(data, r);
+    const filled = isProfitFilled(r.rid);
+    // 미입력 매물은 정렬 시 항상 맨 아래로 (큰 값 desc/작은 값 asc 양쪽에서)
+    if (!filled) return currentSort.dir === 'asc' ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+    if (key === 'monthlyProfit') return sim.monthlyProfit;
+    if (key === 'yearlyRoi')     return sim.yearlyRoi != null ? sim.yearlyRoi : -Infinity;
+    if (key === 'recovery')      return sim.totalRecoveryMonths != null ? sim.totalRecoveryMonths : Infinity;
+  }
+  return 0;
+}
+
+function setSort(key) {
+  if (currentSort.key === key) {
+    currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    currentSort.key = key;
+    // 주소/층은 오름차순이 자연스럽고 나머지는 큰 값부터(desc)
+    currentSort.dir = (key === 'address' || key === 'floor') ? 'asc' : 'desc';
+  }
+  sortAndRender();
+}
+
+function onGroupToggle() {
+  const cb = document.getElementById('groupByBuilding');
+  groupByBuilding = !!(cb && cb.checked);
+  if (lastResults.length) sortAndRender();
+}
+
+function getRoomFloor(r) {
+  const d = r.detail || {};
+  // 1. detail.floor 가 있으면 우선 사용
+  if (d.floor !== null && d.floor !== undefined && d.floor !== '') return String(d.floor);
+  // 2. full_address 끝의 "N층" 패턴 추출 (API에 floor 필드가 없을 때 폴백)
+  const addr = d.full_address || '';
+  const m = addr.match(/(\d+)\s*층\s*$/);
+  return m ? m[1] : '';
+}
+
+function _floorNum(r) {
+  const f = getRoomFloor(r);
+  const n = parseInt(f);
+  return isNaN(n) ? 0 : n;
+}
+
+function sortAndRender() {
+  const isStr = currentSort.key === 'address';
+  const dir   = currentSort.dir === 'asc' ? 1 : -1;
+
+  const cmpRoom = (a, b) => {
+    const va = getSortValue(a, currentSort.key);
+    const vb = getSortValue(b, currentSort.key);
+    let cmp;
+    if (isStr) cmp = String(va).localeCompare(String(vb), 'ko');
+    else       cmp = (va || 0) - (vb || 0);
+    if (cmp === 0) cmp = _floorNum(a) - _floorNum(b);  // 같은 그룹 내 층 오름차순
+    return cmp * dir;
+  };
+
+  const grid = document.getElementById('analysisGrid');
+
+  if (groupByBuilding) {
+    // 1. 도로명 주소(층 제외) 기준으로 그룹화 (에러는 별도)
+    const groups   = new Map();
+    const errorRows = [];
+    lastResults.forEach(r => {
+      if (r.error) { errorRows.push(r); return; }
+      const key = getAddressSortKey(r);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(r);
+    });
+
+    // 2. 각 그룹 내부 정렬
+    const groupArr = [];
+    groups.forEach((rooms, addr) => {
+      rooms.sort(cmpRoom);
+      groupArr.push({ addr, rooms });
+    });
+
+    // 3. 그룹 순서 정렬 (주소 정렬이면 주소순, 아니면 그룹의 첫 행 값으로)
+    groupArr.sort((a, b) => {
+      if (isStr) {
+        return a.addr.localeCompare(b.addr, 'ko') * dir;
+      }
+      const va = getSortValue(a.rooms[0], currentSort.key);
+      const vb = getSortValue(b.rooms[0], currentSort.key);
+      return ((va || 0) - (vb || 0)) * dir;
+    });
+
+    grid.innerHTML = buildAnalysisTable(groupArr, lastMonths, { mode: 'grouped', errorRows });
+  } else {
+    const sorted = [...lastResults].sort((a, b) => {
+      if (a.error && !b.error) return 1;
+      if (!a.error && b.error) return -1;
+      return cmpRoom(a, b);
+    });
+    grid.innerHTML = buildAnalysisTable(sorted, lastMonths, { mode: 'flat' });
+  }
+
+  attachPreviewHandlers();
+  attachCalendarHandlers();
+}
+
+function _sortIcon(key) {
+  if (currentSort.key !== key) return '<span class="sort-ind">↕</span>';
+  return `<span class="sort-ind active">${currentSort.dir === 'asc' ? '↑' : '↓'}</span>`;
+}
+
+function buildAnalysisTable(items, months, opts) {
+  opts = opts || { mode: 'flat' };
+  const grouped = opts.mode === 'grouped';
+
+  const monthHeaders = months.map(ym => {
+    const [yr, mo] = ym.split('-');
+    return `<th class="sortable" onclick="setSort('month:${ym}')">${yr.slice(2)}.${parseInt(mo)}월${_sortIcon('month:'+ym)}</th>`;
+  }).join('');
+
+  const totalCols = months.length + 8;  // 물건4(매물/층/면적/비용) + 전체1 + 월N + 수익3
+
+  let bodyHtml = '';
+  if (grouped) {
+    items.forEach(({ addr, rooms }) => {
+      const valid = rooms.filter(r => !r.error);
+      const avgRate = valid.length
+        ? Math.round(valid.reduce((s, r) => s + (r.overall_rate || 0), 0) / valid.length * 10) / 10
+        : 0;
+      bodyHtml += `
+        <tr class="group-header-row"><td colspan="${totalCols}">
+          <div class="group-header">
+            <span class="group-addr">📍 ${esc(addr)}</span>
+            <span class="group-meta">${rooms.length}건 · 평균 예약율 <strong>${avgRate}%</strong></span>
+          </div>
+        </td></tr>`;
+      bodyHtml += rooms.map(r => buildAnalysisRow(r, months, true)).join('');
+    });
+    if (opts.errorRows && opts.errorRows.length) {
+      bodyHtml += opts.errorRows.map(r => buildAnalysisRow(r, months, false)).join('');
+    }
+  } else {
+    bodyHtml = items.map(r => buildAnalysisRow(r, months, false)).join('');
+  }
+
+  return `
+    <div class="analysis-table-wrap">
+      <table class="analysis-table">
+        <thead>
+          <tr class="group-row">
+            <th class="group-info" colspan="4">📦 물건 정보</th>
+            <th class="group-booking" colspan="${1 + months.length}">📅 예약 현황</th>
+            <th class="group-profit" colspan="3">💰 수익 분석</th>
+          </tr>
+          <tr>
+            <th class="col-title sortable" onclick="setSort('address')">매물 (주소)${_sortIcon('address')}</th>
+            <th class="sortable" onclick="setSort('floor')">층${_sortIcon('floor')}</th>
+            <th class="sortable" onclick="setSort('area')">면적 / 구조${_sortIcon('area')}</th>
+            <th class="sortable section-end" onclick="setSort('fee')">비용 (주당)${_sortIcon('fee')}</th>
+            <th class="sortable" onclick="setSort('overall')">전체${_sortIcon('overall')}</th>
+            ${monthHeaders}
+            <th class="sortable section-start" onclick="setSort('monthlyProfit')">월 순이익 / 수익률${_sortIcon('monthlyProfit')}</th>
+            <th class="sortable" onclick="setSort('yearlyRoi')">연 수익 / 수익률${_sortIcon('yearlyRoi')}</th>
+            <th class="sortable" onclick="setSort('recovery')">회수기간 (초기/총)${_sortIcon('recovery')}</th>
+          </tr>
+        </thead>
+        <tbody>${bodyHtml || `<tr><td colspan="${totalCols}" style="padding:30px;color:#aaa">데이터 없음</td></tr>`}</tbody>
+      </table>
+    </div>`;
+}
+
+function buildAnalysisRow(r, months, grouped) {
+  const d   = r.detail || {};
+  const loc = [r.province, r.town].filter(Boolean).join(' ');
+  // 매물 셀에 표시할 주소: 층 제거한 도로명 주소까지만 (층은 별도 컬럼)
+  const displayAddr = getAddressSortKey(r) || loc;
+  const floor       = getRoomFloor(r);
+  // 그룹 모드: 주소도 그룹 헤더에 있으므로 매물 셀에서는 생략
+  const addrDisplayHtml = grouped
+    ? ''
+    : (displayAddr ? `<div class="title-addr">📍 ${esc(displayAddr)}</div>` : '');
+  // 층 셀 컨텐츠 (이모지 없이 깔끔한 텍스트)
+  const floorCellHtml = floor
+    ? `<span style="font-weight:600;color:#333">${esc(floor)}층</span>`
+    : '<span style="color:#bbb">-</span>';
+
+  if (r.error) {
+    const span = months.length + 6;  // 매물 셀 1 + 층 1 = 2개 차지, 나머지 = totalCols-2 = (months+8)-2 = months+6
+    return `
+      <tr>
+        <td class="title-cell">
+          <div class="title-name">${esc(r.title)}</div>
+          ${addrDisplayHtml}
+        </td>
+        <td class="col-num">${floorCellHtml}</td>
+        <td colspan="${span}" style="color:#e74c3c;text-align:left">⚠️ ${esc(r.error)}</td>
+      </tr>`;
+  }
+
+  const rate = r.overall_rate || 0;
+  const rateClass = rate >= 70 ? 'rate-high' : rate >= 40 ? 'rate-med' : 'rate-low';
+
+  // 전체 예약율 셀에 매달 정보를 묶어서 데이터로 임베드
+  const yearData = {
+    title:         r.title,
+    overall_rate:  rate,
+    total_days:    r.total_days,
+    total_blocked: r.total_blocked,
+    months: months.map(ym => {
+      const v = (r.monthly||{})[ym];
+      if (!v || v.error) return null;
+      const [yr, mo] = ym.split('-');
+      return {
+        year:  parseInt(yr),
+        month: parseInt(mo),
+        total: v.total,
+        rate:  v.rate || 0,
+        booking_dates: v.booking_dates || [],
+        disable_dates: v.disable_dates || [],
+      };
+    }).filter(Boolean),
+  };
+  const yearAttr = JSON.stringify(yearData).replace(/'/g, '&#39;');
+
+  // 월별 셀 (호버 시 달력 팝업)
+  const monthCells = months.map(ym => {
+    const v = (r.monthly||{})[ym];
+    if (!v || v.error) return `<td class="month-cell">-</td>`;
+    const mr = v.rate || 0;
+    const mc = mr >= 70 ? 'rate-high' : mr >= 40 ? 'rate-med' : 'rate-low';
+    const [yr, mo] = ym.split('-');
+    const monthData = JSON.stringify({
+      year:   parseInt(yr),
+      month:  parseInt(mo),
+      total:  v.total,
+      blocked: v.blocked,
+      booking_dates:   v.booking_dates   || [],
+      disable_dates:   v.disable_dates   || [],
+      available_dates: v.available_dates || [],
+      rate:   mr,
+      title:  r.title,
+    }).replace(/'/g, '&#39;');  // attribute 안에서 깨지지 않도록
+    return `<td class="month-cell" data-month-data='${monthData}'><span class="rate-cell ${mc}">${mr}%</span></td>`;
+  }).join('');
+
+  // 수익 분석 (per-property 데이터 + 글로벌 디폴트)
+  const profitDataEff = getEffectiveProfitData(r.rid, r);
+  const profitSim     = calcProfit(profitDataEff, r);
+  const profitFilled  = isProfitFilled(r.rid);
+
+  // ── 물건 정보: 대표 이미지 + 매물명 + 지도 + 이미지 strip ──
+  // 대표 이미지 (호버 시 미리보기, 클릭 시 라이트박스)
+  const thumbHtml = r.image
+    ? `<div class="title-thumb" style="background-image:url(${esc(r.image)})"
+            data-preview-img="${esc(r.image)}"
+            onclick="openImageLightbox('${esc(r.rid)}')" title="대표 이미지"></div>`
+    : `<div class="title-thumb-placeholder">🏢</div>`;
+
+  // 지도 URL (클릭 시 네이버 지도 새 탭) + 호버 미리보기 (OSM 실시간 iframe)
+  // 주소 검색 우선 (가장 정확) → 좌표 폴백
+  // displayAddr는 이미 getAddressSortKey()를 거쳐 층/호가 제거된 도로명 주소
+  let mapUrl = '', mapIframeUrl = '';
+  if (displayAddr) {
+    mapUrl = `https://map.naver.com/p/search/${encodeURIComponent(displayAddr)}`;
+  } else if (d.lat && d.lng) {
+    mapUrl = `https://map.naver.com/p/?c=15.00,0,0,0,0,dh&p=${d.lng},${d.lat},15`;
+  }
+  if (d.lat && d.lng) {
+    // OSM 임베드 iframe — 좌표 기반 bbox + 마커 (호버 미리보기)
+    const dLng = 0.004, dLat = 0.003;
+    const bbox = `${(d.lng - dLng).toFixed(6)},${(d.lat - dLat).toFixed(6)},${(d.lng + dLng).toFixed(6)},${(d.lat + dLat).toFixed(6)}`;
+    mapIframeUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${d.lat},${d.lng}`;
+  }
+  const mapPreviewAttr = mapIframeUrl
+    ? ` data-preview-iframe="${esc(mapIframeUrl)}" data-preview-w="460" data-preview-h="320"`
+    : '';
+
+  // 이미지 strip: 대표 이미지를 제외한 나머지 (최대 12장)
+  const mainPath = (r.image || '').split('?')[0];
+  const otherImages = (d.image_urls || [])
+    .filter(u => u && u.split('?')[0] !== mainPath)
+    .slice(0, 12);
+  const totalImgCnt = (d.image_urls || []).length;
+  const stripExtra  = totalImgCnt > otherImages.length + 1
+    ? `<div class="title-img-more">+${totalImgCnt - otherImages.length - 1}</div>` : '';
+  const stripHtml = otherImages.length ? `
+    <div class="title-img-strip">
+      ${otherImages.map(url =>
+        `<div class="strip-thumb" style="background-image:url(${esc(url)})"
+              data-preview-img="${esc(url)}"
+              onclick="openImageLightbox('${esc(r.rid)}', '${esc(url)}')"></div>`
+      ).join('')}
+      ${stripExtra}
+    </div>` : '';
+
+  // 면적 / 구조 셀
+  const layoutParts = [];
+  if (d.room_cnt)        layoutParts.push(`방 ${d.room_cnt}`);
+  if (d.bathroom_cnt)    layoutParts.push(`욕실 ${d.bathroom_cnt}`);
+  if (d.cookroom_cnt)    layoutParts.push(`주방 ${d.cookroom_cnt}`);
+  if (d.sittingroom_cnt) layoutParts.push(`거실 ${d.sittingroom_cnt}`);
+  const propType = d.property_type ? `<div class="cell-sub">${esc(d.property_type)}</div>` : '';
+
+  // 비용 셀 (multi-line: 주당/관리/보증금/청소비)
+  const fees = [];
+  if (r.using_fee)     fees.push(['주당', fmtWon(r.using_fee)]);
+  if (r.mgmt_fee)      fees.push(['관리', fmtWon(r.mgmt_fee)]);
+  if (d.deposit)       fees.push(['보증금', fmtWon(d.deposit)]);
+  if (d.cleaning_fee)  fees.push(['청소비', fmtWon(d.cleaning_fee)]);
+  const feeHtml = fees.map(([k,v]) =>
+    `<div class="fee-line"><span class="fk">${esc(k)}</span><span class="fv">${esc(v)}</span></div>`
+  ).join('') || '<span style="color:#aaa">-</span>';
+
+  return `
+    <tr data-rid="${esc(r.rid)}">
+      <td class="title-cell" data-rid="${esc(r.rid)}">
+        <div class="title-rich">
+          ${thumbHtml}
+          <div class="title-info">
+            <div class="title-name" onclick="openImageLightbox('${esc(r.rid)}')">${esc(r.title)}</div>
+            ${addrDisplayHtml}
+            <div class="title-actions">
+              ${mapUrl ? `<a class="title-action-btn"${mapPreviewAttr} href="${esc(mapUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🗺 지도</a>` : ''}
+              ${r.detail_url ? `<a class="title-action-btn" href="${esc(r.detail_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ 상세</a>` : ''}
+            </div>
+          </div>
+        </div>
+        ${stripHtml}
+      </td>
+      <td class="col-num">${floorCellHtml}</td>
+      <td class="col-num">
+        ${d.area_label ? `<div style="font-weight:600">${esc(d.area_label)}</div>` : '<span style="color:#aaa">-</span>'}
+        ${layoutParts.length ? `<div class="cell-sub">${esc(layoutParts.join(' · '))}</div>` : ''}
+        ${propType}
+      </td>
+      <td class="section-end" style="text-align:left;padding-left:14px">${feeHtml}</td>
+<td class="col-num year-cell" data-year-data='${yearAttr}'><span class="rate-cell ${rateClass}" style="font-size:1rem">${rate}%</span></td>
+      ${monthCells}
+      <td class="col-num section-start clickable-profit cell-monthly-profit" onclick="openProfitModal('${esc(r.rid)}')">${renderProfitCellContent(profitSim, profitFilled)}</td>
+      <td class="col-num clickable-profit cell-yearly-roi" onclick="openProfitModal('${esc(r.rid)}')">${renderRoiCellContent(profitSim, profitFilled)}</td>
+      <td class="col-num clickable-profit cell-recovery" onclick="openProfitModal('${esc(r.rid)}')">${renderRecoveryCellContent(profitSim, profitFilled, r.rid)}</td>
+    </tr>`;
+}
+
+/* ── 이미지/지도 호버 미리보기 (이미지 또는 iframe 지원) ──────── */
+function attachPreviewHandlers() {
+  const popup = document.getElementById('previewPopup');
+  if (!popup) return;
+
+  document.querySelectorAll('[data-preview-img], [data-preview-iframe]').forEach(el => {
+    const imgUrl    = el.dataset.previewImg;
+    const iframeUrl = el.dataset.previewIframe;
+    const w = parseInt(el.dataset.previewW) || 300;
+    const h = parseInt(el.dataset.previewH) || 200;
+
+    el.addEventListener('mouseenter', () => {
+      if (iframeUrl) {
+        popup.innerHTML = `<iframe src="${iframeUrl}" loading="lazy"></iframe>`;
+      } else if (imgUrl) {
+        popup.innerHTML = `<img src="${imgUrl}" alt=""/>`;
+      } else {
+        return;
+      }
+      popup.style.width  = w + 'px';
+      popup.style.height = h + 'px';
+      popup.style.display = 'block';
+    });
+    el.addEventListener('mousemove', e => {
+      const m = 16;
+      let x = e.clientX + m;
+      let y = e.clientY + m;
+      if (x + w > window.innerWidth)  x = e.clientX - w - m;
+      if (y + h > window.innerHeight) y = e.clientY - h - m;
+      popup.style.left = x + 'px';
+      popup.style.top  = y + 'px';
+    });
+    el.addEventListener('mouseleave', () => {
+      popup.style.display = 'none';
+    });
+  });
+}
+
+/* ── 월별/전체 셀 호버 → 달력 팝업 ──────────────────── */
+function _bindCalHover(cell, popup, builder, w, h, modeClass) {
+  cell.addEventListener('mouseenter', () => {
+    popup.classList.toggle('year-strip-mode', modeClass === 'year');
+    popup.innerHTML = builder();
+    popup.style.display = 'block';
+  });
+  cell.addEventListener('mousemove', e => {
+    const m = 16;
+    let x = e.clientX + m;
+    let y = e.clientY + m;
+    if (x + w > window.innerWidth)  x = e.clientX - w - m;
+    if (y + h > window.innerHeight) y = e.clientY - h - m;
+    popup.style.left = x + 'px';
+    popup.style.top  = y + 'px';
+  });
+  cell.addEventListener('mouseleave', () => {
+    popup.style.display = 'none';
+  });
+}
+
+function attachCalendarHandlers() {
+  const popup = document.getElementById('calendarPopup');
+  if (!popup) return;
+
+  // 월별 셀 → 단일 월 달력
+  document.querySelectorAll('.month-cell[data-month-data]').forEach(cell => {
+    let data;
+    try { data = JSON.parse(cell.dataset.monthData); } catch(e) { return; }
+    _bindCalHover(cell, popup, () => buildCalendarHTML(data), 310, 280, 'month');
+  });
+
+  // 전체 예약율 셀 → 연간 strip (모든 월을 1~31일 막대로)
+  document.querySelectorAll('.year-cell[data-year-data]').forEach(cell => {
+    let data;
+    try { data = JSON.parse(cell.dataset.yearData); } catch(e) { return; }
+    _bindCalHover(cell, popup, () => buildYearStripHTML(data), 560, 320, 'year');
+  });
+}
+
+function buildYearStripHTML(d) {
+  const { title, overall_rate, total_days, total_blocked, months } = d;
+  const totalAvail = total_days - total_blocked;
+  const pad2 = n => String(n).padStart(2, '0');
+
+  const headerNums = Array.from({length: 31}, (_, i) => {
+    const day = i + 1;
+    const show = day === 1 || day % 5 === 0 || day === 31;
+    return `<div>${show ? day : ''}</div>`;
+  }).join('');
+
+  const rows = (months || []).map(m => {
+    const bookedSet   = new Set(m.booking_dates || []);
+    const disabledSet = new Set(m.disable_dates || []);
+    const cells = [];
+    for (let day = 1; day <= 31; day++) {
+      if (day > m.total) { cells.push('<div class="ys-day empty"></div>'); continue; }
+      const ds  = `${m.year}-${pad2(m.month)}-${pad2(day)}`;
+      const cls = bookedSet.has(ds) ? 'booked' : disabledSet.has(ds) ? 'disabled' : '';
+      cells.push(`<div class="ys-day ${cls}" title="${ds}"></div>`);
+    }
+    const mc = m.rate >= 70 ? 'rate-high' : m.rate >= 40 ? 'rate-med' : 'rate-low';
+    return `
+      <div class="ys-row">
+        <div class="ys-label">${m.month}월</div>
+        <div class="ys-rate ${mc}">${m.rate}%</div>
+        <div class="ys-days">${cells.join('')}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="cal-head">${esc(title || '')}</div>
+    <div class="cal-month">전체 예약율 <strong>${overall_rate}%</strong> · 예약 ${total_blocked}/${total_days}일</div>
+    <div class="ys-grid">
+      <div class="ys-row ys-header">
+        <div class="ys-label"></div>
+        <div class="ys-rate" style="color:#aaa">일자</div>
+        <div class="ys-days">${headerNums}</div>
+      </div>
+      ${rows}
+    </div>
+    <div class="cal-legend">
+      <span><span class="cal-legend-dot" style="background:#e74c3c"></span>예약 ${total_blocked}일</span>
+      <span><span class="cal-legend-dot" style="background:#f5f7fa;border:1px solid #ddd"></span>가능 ${totalAvail}일</span>
+    </div>`;
+}
+
+function buildCalendarHTML(d) {
+  const { year, month, total, booking_dates = [], disable_dates = [], rate, title } = d;
+  const firstDow = new Date(year, month - 1, 1).getDay(); // 0=일
+  const bookedSet   = new Set(booking_dates);
+  const disabledSet = new Set(disable_dates);
+  const pad2 = n => String(n).padStart(2, '0');
+
+  let cells = '';
+  for (let i = 0; i < firstDow; i++) cells += '<div class="cal-day empty"></div>';
+  for (let day = 1; day <= total; day++) {
+    const dateStr = `${year}-${pad2(month)}-${pad2(day)}`;
+    const cls = bookedSet.has(dateStr)   ? 'booked'
+              : disabledSet.has(dateStr) ? 'disabled' : '';
+    cells += `<div class="cal-day ${cls}">${day}</div>`;
+  }
+
+  const bookedCnt   = booking_dates.length;
+  const disabledCnt = disable_dates.length;
+  const availCnt    = total - bookedCnt - disabledCnt;
+
+  return `
+    <div class="cal-head">${esc(title || '')}</div>
+    <div class="cal-month">${year}년 ${month}월 · 예약율 <strong>${rate}%</strong></div>
+    <div class="cal-grid">
+      <div class="cal-dow sun">일</div>
+      <div class="cal-dow">월</div>
+      <div class="cal-dow">화</div>
+      <div class="cal-dow">수</div>
+      <div class="cal-dow">목</div>
+      <div class="cal-dow">금</div>
+      <div class="cal-dow sat">토</div>
+      ${cells}
+    </div>
+    <div class="cal-legend">
+      <span><span class="cal-legend-dot" style="background:#e74c3c"></span>예약 ${bookedCnt}일</span>
+      ${disabledCnt > 0 ? `<span><span class="cal-legend-dot" style="background:#888"></span>차단 ${disabledCnt}일</span>` : ''}
+      <span><span class="cal-legend-dot" style="background:#f5f7fa;border:1px solid #ddd"></span>가능 ${availCnt}일</span>
+    </div>`;
+}
+
+function openImageLightbox(rid, imageUrl) {
+  const r = lastResults.find(x => String(x.rid) === String(rid));
+  if (!r) return;
+
+  // 호버 팝업은 즉시 숨김
+  document.getElementById('previewPopup').style.display = 'none';
+  document.getElementById('calendarPopup').style.display = 'none';
+
+  const overlay = document.getElementById('lightboxOverlay');
+  const imgEl   = document.getElementById('lightboxImg');
+  const titleEl = document.getElementById('lightboxTitle');
+  const locEl   = document.getElementById('lightboxLoc');
+  const linkEl  = document.getElementById('lightboxLink');
+
+  // 호출 시 imageUrl이 있으면 그 이미지를, 없으면 대표 이미지를 표시
+  const showImg = imageUrl || r.image;
+  if (showImg) {
+    imgEl.src = showImg;
+    imgEl.style.display = 'block';
+  } else {
+    imgEl.removeAttribute('src');
+    imgEl.style.display = 'none';
+  }
+  titleEl.textContent = r.title || '';
+  const loc = (r.detail && r.detail.full_address) || [r.province, r.town].filter(Boolean).join(' ');
+  locEl.textContent = `📍 ${loc} · ${r.price||''}`;
+  linkEl.href = r.detail_url || '#';
+  overlay.classList.add('open');
+}
+
+function closeImageLightbox() {
+  document.getElementById('lightboxOverlay').classList.remove('open');
+}
+
+function clearAnalysis() {
+  lastResults = [];
+  document.getElementById('analysisGrid').innerHTML = '';
+  document.getElementById('analysisStatus').style.display = 'none';
+  document.getElementById('analysisError').style.display  = 'none';
+  document.getElementById('analysisEmpty').style.display  = 'block';
+  document.getElementById('simPanel').style.display       = 'none';
+}
+
+/* ── 유틸 ──────────────────────────────────── */
+function setStatus(id, msg, color) {
+  const bar = document.getElementById(id);
+  if (!bar) return;
+  // 인라인 status (.status-inline) vs 기존 status-bar 둘 다 지원
+  if (bar.classList.contains('status-inline')) {
+    bar.classList.add('show');
+    bar.style.color      = color;
+    bar.style.background = color + '1a';
+    bar.style.borderColor = color + '55';
+  } else {
+    bar.style.display    = 'block';
+    bar.style.borderLeft = `4px solid ${color}`;
+    bar.style.color      = color;
+    bar.style.background = color + '18';
+  }
+  bar.textContent = msg;
+}
+
+function showError(id, msg) {
+  const b = document.getElementById(id);
+  b.style.display = 'block';
+  b.textContent   = '❌ ' + msg;
+}
+
+function esc(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// 모달 외부 클릭 시 닫기
+document.getElementById('loginModal').addEventListener('click', function(e) {
+  if (e.target === this) closeLoginModal();
+});
+
+// 라이트박스 외부 클릭 시 닫기
+document.getElementById('lightboxOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeImageLightbox();
+});
+
+// ESC 키로 라이트박스/로그인/수익분석 모달 닫기
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeImageLightbox();
+    closeLoginModal();
+    closeProfitModal();
+  }
+});
+
+// 수익분석 모달 외부 클릭 시 닫기
+document.getElementById('profitModal').addEventListener('click', function(e) {
+  if (e.target === this) closeProfitModal();
+});
+
+// ── 카드 이벤트 위임 (inline onclick 대신 안정적인 방식) ──
+document.getElementById('roomGrid').addEventListener('click', function(e) {
+  const card = e.target.closest('[data-rid]');
+  if (!card) return;
+  toggleSelect(card.dataset.rid);
+});
+
+// ── 헤더 + 탭바 높이 측정 → CSS 변수 동기화 (사이드바 sticky 정렬용) ──
+function syncHeaderHeight() {
+  const headerH = document.querySelector('header')?.offsetHeight || 70;
+  const tabbarH = document.querySelector('.tab-bar')?.offsetHeight || 50;
+  document.documentElement.style.setProperty('--header-h', headerH + 'px');
+  document.documentElement.style.setProperty('--tabbar-h', tabbarH + 'px');
+}
+window.addEventListener('DOMContentLoaded', syncHeaderHeight);
+window.addEventListener('resize', syncHeaderHeight);
+syncHeaderHeight();
+
+// ── 페이지 로드 시 서버에 로그인 상태 확인 (새로고침 후 로그인 유지) ──
+async function checkSession() {
+  try {
+    const res  = await fetch('/api/session');
+    const data = await res.json();
+    if (data.loggedIn) {
+      loggedIn  = true;
+      userEmail = data.email || '';
+    }
+  } catch(e) { /* 무시 */ }
+  // 로그인 결과 반영 (잠금 표시, 분석 버튼 등)
+  updateHeaderLogin();
+}
+checkSession();
+loadProfitDataAll();
+loadProfitDefaults();
+loadCustomDefaultInvestments();
+// 글로벌 패널 입력 동기화
+(function() {
+  const occEl = document.getElementById('globalOccupancy');
+  const utEl  = document.getElementById('globalUtility');
+  const spEl  = document.getElementById('globalSupplies');
+  if (occEl) occEl.value = simParams.occupancy;
+  if (utEl)  utEl.value  = simParams.utilityFee;
+  if (spEl)  spEl.value  = simParams.suppliesFee;
+  const occVal = document.getElementById('globalOccupancyVal');
+  if (occVal) occVal.textContent = simParams.occupancy + '%';
+})();
+updateSimSummary();
+</script>
+</body>
+</html>
