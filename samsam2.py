@@ -129,7 +129,7 @@ def _zoom_to_bbox(lat, lng, zoom):
     }
 
 
-def fetch_page(sort="POPULAR", property_types="OFFICETEL", page=1, size=20,
+def fetch_page(sort="POPULAR", property_types="OFFICETEL", page=1, size=50,
                keyword=None):
     """정렬순 / 키워드 검색 — 일반 rooms API"""
     params = {"sortBy": sort, "propertyTypes": property_types, "page": page, "size": size}
@@ -142,7 +142,7 @@ def fetch_page(sort="POPULAR", property_types="OFFICETEL", page=1, size=20,
     return rooms_obj.get("content", []), rooms_obj.get("last", True)
 
 
-def fetch_map_page(lat, lng, zoom, sort="POPULAR", property_types="OFFICETEL", page=1, size=20):
+def fetch_map_page(lat, lng, zoom, sort="POPULAR", property_types="OFFICETEL", page=1, size=50):
     """좌표(바운딩 박스) 검색 — map/rooms API"""
     bbox = _zoom_to_bbox(lat, lng, zoom)
     params = {

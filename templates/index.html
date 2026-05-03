@@ -819,6 +819,17 @@
     .profit-row.auto-row .pr-label::after {
       content: " 🔗"; font-size: .7rem; opacity: .5;
     }
+    .profit-row .pr-reset {
+      background: #fff; border: 1px solid #d0d7e0; color: #5a7090;
+      width: 24px; height: 24px; border-radius: 5px;
+      font-size: .85rem; cursor: pointer; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .profit-row .pr-reset:hover { background: #eef2f7; color: #1a4a82; }
+    .profit-row.overridden { background: #fffaf0; }
+    .profit-row.overridden .pr-label::before {
+      content: "✏️ "; font-size: .65rem;
+    }
     .profit-row.result-row { background: #f0f6ff; font-weight: 700; }
     .profit-row.result-row .pr-value { color: #2c72c8; }
     .profit-row.profit-final {
@@ -828,7 +839,8 @@
     .profit-row.profit-final .pr-value { font-size: 1rem; font-weight: 800; }
     .profit-row.profit-final.positive .pr-value { color: #27ae60; }
     .profit-row.profit-final.negative .pr-value { color: #c0392b; }
-    .profit-row input[type="number"] {
+    .profit-row input[type="number"],
+    .profit-row input.money-input {
       width: 130px; padding: 4px 8px;
       border: 1px solid #d0d7e0; border-radius: 5px;
       font-size: .82rem; text-align: right;
@@ -841,7 +853,8 @@
       flex: 1; padding: 4px 8px; border: 1px solid #d0d7e0;
       border-radius: 5px; font-size: .8rem;
     }
-    .profit-investment-row input[type="number"] {
+    .profit-investment-row input[type="number"],
+    .profit-investment-row input.money-input {
       width: 110px; padding: 4px 8px; border: 1px solid #d0d7e0;
       border-radius: 5px; font-size: .8rem; text-align: right;
     }
@@ -859,6 +872,34 @@
       cursor: pointer; font-size: .8rem;
     }
     .profit-add-btn:hover { background: #e1edff; }
+    .profit-preset-bar {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 13px; background: #f5faff;
+      border-bottom: 1px solid #e0eaf5;
+    }
+    .profit-preset-bar .preset-label {
+      font-size: .75rem; color: #5a7090; font-weight: 600;
+      flex: 0 0 auto;
+    }
+    .profit-preset-bar select {
+      flex: 1; min-width: 0;
+      padding: 4px 8px; border: 1px solid #c5d3e3; border-radius: 5px;
+      font-size: .8rem; background: #fff;
+    }
+    .profit-preset-bar .preset-btn {
+      width: 28px; height: 28px; padding: 0;
+      border: 1px solid #c5d3e3; background: #fff;
+      border-radius: 5px; cursor: pointer;
+      font-size: .85rem; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      flex: 0 0 auto;
+    }
+    .profit-preset-bar .preset-btn:hover:not(:disabled) {
+      background: #e8f0fa; border-color: #2c72c8;
+    }
+    .profit-preset-bar .preset-btn:disabled {
+      opacity: .35; cursor: not-allowed;
+    }
     .profit-modal-footer {
       padding: 12px 18px; border-top: 1px solid #eee;
       display: flex; justify-content: space-between; gap: 8px;
@@ -985,9 +1026,11 @@
       <div class="sb-section">
         <label>최대 수집</label>
         <select id="maxPages">
-          <option value="1">20개</option>
-          <option value="3">60개</option>
-          <option value="5" selected>100개</option>
+          <option value="1">50개</option>
+          <option value="2" selected>100개</option>
+          <option value="4">200개</option>
+          <option value="10">500개</option>
+          <option value="20">1000개</option>
         </select>
       </div>
 
@@ -1104,6 +1147,11 @@
           🏢 도로명 그룹
         </label>
         <button class="btn btn-secondary" onclick="clearAnalysis()" style="font-size:.8rem;padding:6px 12px">결과 초기화</button>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:.8rem;color:#555;font-weight:500">
+          📅 표시 범위:
+          <select id="displayUntilYm" onchange="applyMonthFilter()"
+                  style="font-size:.8rem;padding:5px 8px;border:1px solid #d0d7e0;border-radius:5px;background:#fff"></select>
+        </span>
         <span class="toolbar-spacer"></span>
         <span class="status-inline" id="analysisStatus"></span>
       </div>
@@ -1241,6 +1289,7 @@ let groupByBuilding = false;  // 건물별 묶기 (도로명 주소까지 같은
 const PROFIT_DATA_KEY                = 'samsam2_profit_data';
 const PROFIT_DEFAULTS_KEY            = 'samsam2_profit_defaults';
 const PROFIT_DEFAULT_INVESTMENTS_KEY = 'samsam2_default_investments';
+const INVESTMENT_PRESETS_KEY         = 'samsam2_investment_presets';
 
 // 출시 디폴트 (사용자가 커스텀 디폴트를 저장하지 않았을 때 사용)
 const DEFAULT_INVESTMENTS = [
@@ -1277,6 +1326,20 @@ function saveCustomDefaultInvestments(items) {
 function clearCustomDefaultInvestments() {
   customDefaultInvestments = null;
   try { localStorage.removeItem(PROFIT_DEFAULT_INVESTMENTS_KEY); } catch(e) {}
+}
+
+/* ── 투자 항목 프리셋 (이름으로 저장된 조건 묶음) ─ */
+let investmentPresets = [];  // [{ name, items:[{name,value}], updatedAt }]
+
+function loadInvestmentPresets() {
+  try {
+    const raw = localStorage.getItem(INVESTMENT_PRESETS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    investmentPresets = Array.isArray(arr) ? arr : [];
+  } catch(e) { investmentPresets = []; }
+}
+function saveInvestmentPresetsToStorage() {
+  try { localStorage.setItem(INVESTMENT_PRESETS_KEY, JSON.stringify(investmentPresets)); } catch(e) {}
 }
 
 // 글로벌 가정값 (모든 매물에 디폴트로 적용)
@@ -1319,36 +1382,36 @@ function saveProfitDefaults() {
   try { localStorage.setItem(PROFIT_DEFAULTS_KEY, JSON.stringify(simParams)); } catch(e){}
 }
 
-// 매물별 effective 데이터 (저장된 값 + 글로벌 디폴트 fallback)
-function getEffectiveProfitData(rid, room) {
+// 예약률 연동값 (표시 범위 필터 적용된 값 우선)
+function getLinkedOccupancy(room) {
+  if (!room) return simParams.occupancy;
+  let baseRate = null;
+  if (room.filtered_overall_rate != null) baseRate = room.filtered_overall_rate;
+  else if (room.overall_rate != null)     baseRate = room.overall_rate;
+  return baseRate != null ? Math.round(baseRate * 10) / 10 : simParams.occupancy;
+}
+function isFieldOverridden(rid, field) {
   const stored = getProfitData(rid);
-  // 측정 예약률 (각 매물의 overall_rate에 자동 연결)
-  const measuredRate = (room && room.overall_rate != null)
-    ? Math.round(room.overall_rate * 10) / 10
-    : null;
+  return !!(stored && stored[field] !== undefined);
+}
+
+// 매물별 effective 데이터 (defaults + stored override)
+//   stored에는 사용자가 명시적으로 변경한 필드만 들어감 → 미변경 필드는 항상 측정/연동값 사용
+function getEffectiveProfitData(rid, room) {
+  const stored = getProfitData(rid) || {};
   const defaults = {
     deposit:       0,
     monthlyRent:   0,
     mgmtFee:       0,
     utilityFee:    simParams.utilityFee,
     suppliesFee:   simParams.suppliesFee,
-    // 예약률은 측정값(overall_rate) 우선, 없으면 글로벌 디폴트
-    occupancy:        measuredRate != null ? measuredRate : simParams.occupancy,
+    // 예약률은 항상 측정값(전체 예약율) 연동이 기본 — 사용자가 명시 override 가능
+    occupancy:        getLinkedOccupancy(room),
     avgBookingWeeks:  1,
-    investments:   getDefaultInvestments(),  // 사용자 커스텀 디폴트가 있으면 그것을, 없으면 출시 기본값
+    investments:   getDefaultInvestments(),
+    // bookedWeeks, bookings는 자동 계산 (override 시 stored가 채움)
   };
-  if (!stored) return defaults;
-  return {
-    deposit:         stored.deposit         !== undefined ? stored.deposit         : defaults.deposit,
-    monthlyRent:     stored.monthlyRent     !== undefined ? stored.monthlyRent     : defaults.monthlyRent,
-    mgmtFee:         stored.mgmtFee         !== undefined ? stored.mgmtFee         : defaults.mgmtFee,
-    utilityFee:      stored.utilityFee      !== undefined ? stored.utilityFee      : defaults.utilityFee,
-    suppliesFee:     stored.suppliesFee     !== undefined ? stored.suppliesFee     : defaults.suppliesFee,
-    // 예약률은 항상 측정값 사용 (stored 무시) — 측정값과 자동 연결
-    occupancy:       defaults.occupancy,
-    avgBookingWeeks: stored.avgBookingWeeks !== undefined ? stored.avgBookingWeeks : defaults.avgBookingWeeks,
-    investments:     stored.investments     || defaults.investments,
-  };
+  return { ...defaults, ...stored };
 }
 
 // 사용자가 한 번이라도 입력한 경우 true (월세나 보증금 중 하나라도 있으면)
@@ -1374,8 +1437,10 @@ function calcProfit(data, room) {
   const occ              = data.occupancy || 0;
   const avgBookingWeeks  = Math.max(0.5, data.avgBookingWeeks || 1);
   const weeksPerMonth    = 4.34;
-  const bookedWeeks      = weeksPerMonth * (occ / 100);
-  const bookings         = bookedWeeks / avgBookingWeeks;
+  const autoBookedWeeks  = weeksPerMonth * (occ / 100);
+  // 사용자 override 우선 (stored.bookedWeeks / stored.bookings)
+  const bookedWeeks      = data.bookedWeeks != null ? Number(data.bookedWeeks) : autoBookedWeeks;
+  const bookings         = data.bookings    != null ? Number(data.bookings)    : (bookedWeeks / avgBookingWeeks);
 
   // 매출 (월)
   const rentRevenue     = weeklyRent * bookedWeeks;
@@ -1418,6 +1483,28 @@ function fmtWon(won) {
   const man = Math.round(abs / 10000);
   const str = man >= 10000 ? `${(man/10000).toFixed(1)}억원` : `${man.toLocaleString()}만원`;
   return won < 0 ? `-${str}` : str;
+}
+
+/* ── 천단위 콤마 표시용 헬퍼 ─────────────────────
+ *   fmtNum(n)         : 숫자 → "1,234,567" 문자열
+ *   onMoneyInput(...) : type="text" 입력 시 콤마 자동 적용 + 숫자값 콜백
+ */
+function fmtNum(n) {
+  const num = Number(n);
+  if (!isFinite(num)) return '0';
+  return num.toLocaleString();
+}
+function onMoneyInput(input, callback) {
+  // 커서를 끝에서부터의 거리로 보존 (콤마 추가/제거에도 일관됨)
+  const cursorBeforeEnd = input.value.length - (input.selectionStart || 0);
+  const digits = input.value.replace(/[^\d]/g, '');
+  const num    = digits ? Number(digits) : 0;
+  input.value  = digits ? num.toLocaleString() : '';
+  try {
+    const newPos = Math.max(0, input.value.length - cursorBeforeEnd);
+    input.setSelectionRange(newPos, newPos);
+  } catch(e) {}
+  callback(num);
 }
 
 /* ── 글로벌 기본값 패널 ────────────────────────── */
@@ -1540,7 +1627,7 @@ function renderProfitModal() {
 
   // 매출 계산기 (좌측)
   document.getElementById('profitRevenueBody').innerHTML = `
-    <div class="profit-row section-divider">📥 단기 임차인 C로부터 받는 금액 (자동)</div>
+    <div class="profit-row section-divider">📥 단기임대 수익</div>
     <div class="profit-row auto-row">
       <span class="pr-label">1주 임대료</span>
       <span class="pr-value">${fmtWon(sim.weeklyRent)}</span>
@@ -1558,39 +1645,44 @@ function renderProfitModal() {
       <span class="pr-value">${fmtWon(sim.tenantDeposit)}</span>
     </div>
 
-    <div class="profit-row section-divider">📤 임대인 A에게 지급</div>
+    <div class="profit-row section-divider">📤 물건 임대료</div>
     <div class="profit-row">
       <span class="pr-label">보증금 <span style="font-size:.7rem;color:#888">(회수 대상)</span></span>
-      <input type="number" step="100000" min="0" value="${data.deposit||0}"
-             oninput="updateProfitField('deposit', this.value)"/>
-    </div>
-    <div class="profit-row">
-      <span class="pr-label">월세</span>
-      <input type="number" step="50000" min="0" value="${data.monthlyRent||0}"
-             oninput="updateProfitField('monthlyRent', this.value)"/>
-    </div>
-    <div class="profit-row">
-      <span class="pr-label">관리비</span>
-      <input type="number" step="10000" min="0" value="${data.mgmtFee||0}"
-             oninput="updateProfitField('mgmtFee', this.value)"/>
+      <input type="text" inputmode="numeric" class="money-input" value="${fmtNum(data.deposit||0)}" id="pr-input-deposit-l"
+             oninput="onMoneyInput(this, v => updateProfitField('deposit', v))"/>
     </div>
 
     <div class="profit-row section-divider">📤 운영비 (월)</div>
     <div class="profit-row">
+      <span class="pr-label">월세</span>
+      <input type="text" inputmode="numeric" class="money-input" value="${fmtNum(data.monthlyRent||0)}" id="pr-input-rent-l"
+             oninput="onMoneyInput(this, v => updateProfitField('monthlyRent', v))"/>
+    </div>
+    <div class="profit-row">
+      <span class="pr-label">관리비</span>
+      <input type="text" inputmode="numeric" class="money-input" value="${fmtNum(data.mgmtFee||0)}" id="pr-input-mgmt-l"
+             oninput="onMoneyInput(this, v => updateProfitField('mgmtFee', v))"/>
+    </div>
+    <div class="profit-row">
       <span class="pr-label">공과금 (전기·가스·수도)</span>
-      <input type="number" step="10000" min="0" value="${data.utilityFee||0}"
-             oninput="updateProfitField('utilityFee', this.value)"/>
+      <input type="text" inputmode="numeric" class="money-input" value="${fmtNum(data.utilityFee||0)}" id="pr-input-utility-l"
+             oninput="onMoneyInput(this, v => updateProfitField('utilityFee', v))"/>
     </div>
     <div class="profit-row">
       <span class="pr-label">비품비 (예비비)</span>
-      <input type="number" step="10000" min="0" value="${data.suppliesFee||0}"
-             oninput="updateProfitField('suppliesFee', this.value)"/>
+      <input type="text" inputmode="numeric" class="money-input" value="${fmtNum(data.suppliesFee||0)}" id="pr-input-supplies-l"
+             oninput="onMoneyInput(this, v => updateProfitField('suppliesFee', v))"/>
     </div>
 
-    <div class="profit-row section-divider">⚙️ 가정값</div>
-    <div class="profit-row auto-row">
+    <div class="profit-row section-divider">⚙️ 예약률 분석</div>
+    <div class="profit-row auto-row ${isFieldOverridden(currentProfitRid, 'occupancy') ? 'overridden' : ''}" id="row-occupancy">
       <span class="pr-label">예약률 (전체 예약율과 연결)</span>
-      <span class="pr-value">${data.occupancy}%</span>
+      <input type="number" step="0.1" min="0" max="100" value="${data.occupancy}"
+             oninput="updateProfitField('occupancy', this.value)" style="width:100px"/>
+      <span style="color:#888;font-size:.78rem">%</span>
+      <button class="pr-reset" id="reset-occupancy" title="연동값으로 되돌리기"
+              onclick="resetProfitField('occupancy')"
+              style="${isFieldOverridden(currentProfitRid, 'occupancy') ? '' : 'display:none'}">↺</button>
     </div>
     <div class="profit-row">
       <span class="pr-label">평균 예약 기간</span>
@@ -1598,13 +1690,23 @@ function renderProfitModal() {
              oninput="updateProfitField('avgBookingWeeks', this.value)" style="width:80px"/>
       <span style="color:#888;font-size:.78rem">주</span>
     </div>
-    <div class="profit-row auto-row">
+    <div class="profit-row auto-row ${isFieldOverridden(currentProfitRid, 'bookedWeeks') ? 'overridden' : ''}" id="row-bookedWeeks">
       <span class="pr-label">예약주 (월)</span>
-      <span class="pr-value" id="pr-booked-weeks">${sim.bookedWeeks.toFixed(2)}주</span>
+      <input type="number" step="0.01" min="0" value="${sim.bookedWeeks.toFixed(2)}"
+             oninput="updateProfitField('bookedWeeks', this.value)" style="width:100px"/>
+      <span style="color:#888;font-size:.78rem">주</span>
+      <button class="pr-reset" id="reset-bookedWeeks" title="자동값으로 되돌리기"
+              onclick="resetProfitField('bookedWeeks')"
+              style="${isFieldOverridden(currentProfitRid, 'bookedWeeks') ? '' : 'display:none'}">↺</button>
     </div>
-    <div class="profit-row auto-row">
+    <div class="profit-row auto-row ${isFieldOverridden(currentProfitRid, 'bookings') ? 'overridden' : ''}" id="row-bookings">
       <span class="pr-label">예약 건수 (월)</span>
-      <span class="pr-value" id="pr-bookings-count">${sim.bookings.toFixed(2)}회</span>
+      <input type="number" step="0.01" min="0" value="${sim.bookings.toFixed(2)}"
+             oninput="updateProfitField('bookings', this.value)" style="width:100px"/>
+      <span style="color:#888;font-size:.78rem">회</span>
+      <button class="pr-reset" id="reset-bookings" title="자동값으로 되돌리기"
+              onclick="resetProfitField('bookings')"
+              style="${isFieldOverridden(currentProfitRid, 'bookings') ? '' : 'display:none'}">↺</button>
     </div>
 
     <div class="profit-row section-divider">💵 매출 (월)</div>
@@ -1627,12 +1729,8 @@ function renderProfitModal() {
 
     <div class="profit-row section-divider">💸 지출 (월)</div>
     <div class="profit-row">
-      <span class="pr-label">임대인 A 지급 (월세+관리비)</span>
-      <span class="pr-value" id="pr-exp-landlord">${fmtWon(sim.landlordExpense)}</span>
-    </div>
-    <div class="profit-row">
-      <span class="pr-label">운영비 (공과금+비품비)</span>
-      <span class="pr-value" id="pr-exp-operating">${fmtWon(sim.operatingExpense)}</span>
+      <span class="pr-label">운영비 (월세+관리비+공과금+비품비)</span>
+      <span class="pr-value" id="pr-exp-operating-all">${fmtWon(sim.totalExpense)}</span>
     </div>
     <div class="profit-row result-row">
       <span class="pr-label">월 지출 합계</span>
@@ -1650,24 +1748,46 @@ function renderProfitModal() {
     <div class="profit-investment-row">
       <input type="text" value="${esc(item.name||'')}"
              onchange="updateInvestmentItem(${idx}, 'name', this.value)"/>
-      <input type="number" step="50000" min="0" value="${item.value||0}"
-             oninput="updateInvestmentItem(${idx}, 'value', this.value)"/>
+      <input type="text" inputmode="numeric" class="money-input" value="${fmtNum(item.value||0)}"
+             oninput="onMoneyInput(this, v => updateInvestmentItem(${idx}, 'value', v))"/>
       <button class="del-btn" onclick="removeInvestmentItem(${idx})" title="삭제">×</button>
     </div>
   `).join('');
 
+  // 프리셋 옵션 HTML
+  const presetOptions =
+    `<option value="">— 프리셋 선택 —</option>` +
+    investmentPresets
+      .slice()
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .map(p => `<option value="${esc(p.name)}">${esc(p.name)} (${p.items.length}개)</option>`)
+      .join('');
+  const hasPresets = investmentPresets.length > 0;
+
   document.getElementById('profitInvestBody').innerHTML = `
-    <div class="profit-row auto-row">
+    <div class="profit-row">
       <span class="pr-label">보증금</span>
-      <span class="pr-value" id="pr-mirror-deposit">${fmtWon(data.deposit||0)}</span>
+      <input type="text" inputmode="numeric" class="money-input" value="${fmtNum(data.deposit||0)}" id="pr-input-deposit-r"
+             oninput="onMoneyInput(this, v => updateProfitField('deposit', v))"/>
     </div>
-    <div class="profit-row auto-row">
+    <div class="profit-row">
       <span class="pr-label">월세</span>
-      <span class="pr-value" id="pr-mirror-rent">${fmtWon(data.monthlyRent||0)}</span>
+      <input type="text" inputmode="numeric" class="money-input" value="${fmtNum(data.monthlyRent||0)}" id="pr-input-rent-r"
+             oninput="onMoneyInput(this, v => updateProfitField('monthlyRent', v))"/>
     </div>
-    <div class="profit-row auto-row">
+    <div class="profit-row">
       <span class="pr-label">관리비</span>
-      <span class="pr-value" id="pr-mirror-mgmt">${fmtWon(data.mgmtFee||0)}</span>
+      <input type="text" inputmode="numeric" class="money-input" value="${fmtNum(data.mgmtFee||0)}" id="pr-input-mgmt-r"
+             oninput="onMoneyInput(this, v => updateProfitField('mgmtFee', v))"/>
+    </div>
+    <div class="profit-preset-bar">
+      <span class="preset-label">📋 프리셋</span>
+      <select id="presetSelect" onchange="loadPreset(this.value)">
+        ${presetOptions}
+      </select>
+      <button class="preset-btn" onclick="savePresetPrompt()" title="현재 항목을 프리셋으로 저장">💾</button>
+      <button class="preset-btn" onclick="renamePresetPrompt()" title="선택된 프리셋 이름 변경" ${hasPresets ? '' : 'disabled'}>✏️</button>
+      <button class="preset-btn" onclick="deletePresetPrompt()" title="선택된 프리셋 삭제" ${hasPresets ? '' : 'disabled'}>🗑</button>
     </div>
     <div class="profit-row section-divider">
       초기 투자 (수정/추가/삭제 가능)
@@ -1717,16 +1837,25 @@ function updateProfitDisplay() {
 
   const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
 
+  // 자동 계산 input(예약주/예약 건수/예약률): 사용자가 override하지 않았고 현재 포커스 중이 아니면 자동값으로 갱신
+  const refreshAuto = (rowId, field, val) => {
+    const input = document.querySelector('#' + rowId + ' input');
+    if (!input) return;
+    if (isFieldOverridden(currentProfitRid, field)) return;
+    if (document.activeElement === input) return;
+    input.value = val;
+  };
+  refreshAuto('row-bookedWeeks', 'bookedWeeks', sim.bookedWeeks.toFixed(2));
+  refreshAuto('row-bookings',    'bookings',    sim.bookings.toFixed(2));
+  refreshAuto('row-occupancy',   'occupancy',   sim.occupancy);
+
   // 좌측: 매출 계산기
-  set('pr-booked-weeks',    sim.bookedWeeks.toFixed(2) + '주');
-  set('pr-bookings-count',  sim.bookings.toFixed(2) + '회');
   set('pr-rev-rent',        fmtWon(sim.rentRevenue));
   set('pr-rev-mgmt',        fmtWon(sim.mgmtRevenue));
   set('pr-rev-cleaning',    fmtWon(sim.cleaningRevenue));
   set('pr-rev-total',       fmtWon(sim.monthlyRevenue));
-  set('pr-exp-landlord',    fmtWon(sim.landlordExpense));
-  set('pr-exp-operating',   fmtWon(sim.operatingExpense));
-  set('pr-exp-total',       fmtWon(sim.totalExpense));
+  set('pr-exp-operating-all', fmtWon(sim.totalExpense));
+  set('pr-exp-total',         fmtWon(sim.totalExpense));
   set('pr-profit-monthly-l',fmtWon(sim.monthlyProfit));
   const pfL = document.getElementById('pr-profit-final-left');
   if (pfL) {
@@ -1734,10 +1863,22 @@ function updateProfitDisplay() {
     pfL.classList.toggle('negative', sim.monthlyProfit < 0);
   }
 
-  // 우측: 투자금 회수 (보증금/월세/관리비 미러 + 결과)
-  set('pr-mirror-deposit',  fmtWon(data.deposit||0));
-  set('pr-mirror-rent',     fmtWon(data.monthlyRent||0));
-  set('pr-mirror-mgmt',     fmtWon(data.mgmtFee||0));
+  // 좌·우 양쪽 input 양방향 동기화 (포커스 중인 input은 건드리지 않음)
+  const syncInput = (id, val) => {
+    const el = document.getElementById(id);
+    if (!el || document.activeElement === el) return;
+    el.value = val;
+  };
+  syncInput('pr-input-deposit-l',  fmtNum(data.deposit     || 0));
+  syncInput('pr-input-deposit-r',  fmtNum(data.deposit     || 0));
+  syncInput('pr-input-rent-l',     fmtNum(data.monthlyRent || 0));
+  syncInput('pr-input-rent-r',     fmtNum(data.monthlyRent || 0));
+  syncInput('pr-input-mgmt-l',     fmtNum(data.mgmtFee     || 0));
+  syncInput('pr-input-mgmt-r',     fmtNum(data.mgmtFee     || 0));
+  syncInput('pr-input-utility-l',  fmtNum(data.utilityFee  || 0));
+  syncInput('pr-input-supplies-l', fmtNum(data.suppliesFee || 0));
+
+  // 우측: 투자금 회수 결과
   set('pr-inv-initial',     fmtWon(sim.initialInvestment));
   set('pr-inv-total',       fmtWon(sim.totalInvestment));
   set('pr-profit-monthly-r',fmtWon(sim.monthlyProfit));
@@ -1754,47 +1895,64 @@ function updateProfitDisplay() {
 
 function updateProfitField(field, value) {
   if (!currentProfitRid) return;
-  const room   = lastResults.find(r => String(r.rid) === currentProfitRid);
   const stored = getProfitData(currentProfitRid) || {};
-  const data   = { ...getEffectiveProfitData(currentProfitRid, room), ...stored };
-  data[field]  = Number(value) || 0;
-  setProfitData(currentProfitRid, data);
+  stored[field] = Number(value) || 0;
+  setProfitData(currentProfitRid, stored);
+  // override 시 ↺ 버튼 노출 + 행에 overridden 클래스 부여 (해당 ID가 있을 때만)
+  const btn = document.getElementById('reset-' + field);
+  if (btn) btn.style.display = '';
+  const row = document.getElementById('row-' + field);
+  if (row) row.classList.add('overridden');
   // 결과 셀만 갱신 → 입력 필드의 포커스 유지 (실시간 반영)
   updateProfitDisplay();
 }
 
+/* 연동/자동 필드를 측정값(자동)으로 되돌림 */
+function resetProfitField(field) {
+  if (!currentProfitRid) return;
+  const stored = getProfitData(currentProfitRid);
+  if (!stored) return;
+  delete stored[field];
+  setProfitData(currentProfitRid, stored);
+  // 입력 필드 값과 ↺ 버튼/스타일 모두 초기 상태로 → 전체 재렌더가 가장 안전
+  renderProfitModal();
+}
+
+/* investments 배열 처리: stored에 investments만 추가/수정 (다른 effective 값은 건드리지 않음) */
+function _getStoredInvestments() {
+  const stored = getProfitData(currentProfitRid) || {};
+  if (Array.isArray(stored.investments)) return [...stored.investments];
+  // 아직 stored에 investments가 없으면 effective default(커스텀 또는 출시 기본)에서 시작
+  const room = lastResults.find(r => String(r.rid) === currentProfitRid);
+  const eff  = getEffectiveProfitData(currentProfitRid, room);
+  return [...(eff.investments || [])];
+}
+
 function updateInvestmentItem(idx, field, value) {
   if (!currentProfitRid) return;
-  const room   = lastResults.find(r => String(r.rid) === currentProfitRid);
   const stored = getProfitData(currentProfitRid) || {};
-  const data   = { ...getEffectiveProfitData(currentProfitRid, room), ...stored };
-  if (!data.investments) data.investments = getDefaultInvestments();
-  data.investments = [...data.investments];
-  if (!data.investments[idx]) data.investments[idx] = { name: '', value: 0 };
-  data.investments[idx] = { ...data.investments[idx] };
-  data.investments[idx][field] = field === 'value' ? Number(value) || 0 : value;
-  setProfitData(currentProfitRid, data);
-  // 항목 값 변경은 결과만 갱신하면 됨 (이름 변경은 표시 영향 없음)
+  const investments = _getStoredInvestments();
+  if (!investments[idx]) investments[idx] = { name: '', value: 0 };
+  investments[idx] = { ...investments[idx] };
+  investments[idx][field] = field === 'value' ? Number(value) || 0 : value;
+  stored.investments = investments;
+  setProfitData(currentProfitRid, stored);
   updateProfitDisplay();
 }
 
 function addInvestmentItem() {
   if (!currentProfitRid) return;
-  const room   = lastResults.find(r => String(r.rid) === currentProfitRid);
   const stored = getProfitData(currentProfitRid) || {};
-  const data   = { ...getEffectiveProfitData(currentProfitRid, room), ...stored };
-  data.investments = [...(data.investments || []), { name: '', value: 0 }];
-  setProfitData(currentProfitRid, data);
+  stored.investments = [..._getStoredInvestments(), { name: '', value: 0 }];
+  setProfitData(currentProfitRid, stored);
   renderProfitModal();
 }
 
 function removeInvestmentItem(idx) {
   if (!currentProfitRid) return;
-  const room   = lastResults.find(r => String(r.rid) === currentProfitRid);
   const stored = getProfitData(currentProfitRid) || {};
-  const data   = { ...getEffectiveProfitData(currentProfitRid, room), ...stored };
-  data.investments = (data.investments || []).filter((_, i) => i !== idx);
-  setProfitData(currentProfitRid, data);
+  stored.investments = _getStoredInvestments().filter((_, i) => i !== idx);
+  setProfitData(currentProfitRid, stored);
   renderProfitModal();
 }
 
@@ -1837,6 +1995,96 @@ function saveInvestmentsAsDefault() {
   )) return;
   saveCustomDefaultInvestments(items);
   alert('기본 투자 항목이 저장되었습니다.\n다음에 새로 분석하는 매물에 자동 적용됩니다.');
+}
+
+/* ── 투자 항목 프리셋 동작 ───────────────────── */
+function _setPresetSelectValue(name) {
+  // renderProfitModal 직후 select 요소가 새로 그려지므로 microtask 뒤로 미룸
+  setTimeout(() => {
+    const sel = document.getElementById('presetSelect');
+    if (sel) sel.value = name || '';
+  }, 0);
+}
+
+function savePresetPrompt() {
+  if (!currentProfitRid) return;
+  const room = lastResults.find(r => String(r.rid) === currentProfitRid);
+  const eff  = getEffectiveProfitData(currentProfitRid, room);
+  const items = (eff.investments || []).filter(i => (i.name || '').trim() || (Number(i.value) || 0) > 0);
+  if (!items.length) { alert('저장할 투자 항목이 없습니다.\n먼저 항목을 추가하거나 값을 입력하세요.'); return; }
+
+  const sel = document.getElementById('presetSelect');
+  const currentSel = sel ? sel.value : '';
+  let name;
+  if (currentSel) {
+    if (confirm(`현재 선택된 "${currentSel}" 프리셋을 덮어쓰시겠습니까?\n— 확인: 덮어쓰기\n— 취소: 새 이름으로 저장`)) {
+      name = currentSel;
+    }
+  }
+  if (!name) {
+    name = prompt('프리셋 이름을 입력하세요 (예: 7평 기준)', '');
+    if (name == null) return;
+    name = name.trim();
+    if (!name) return;
+  }
+  const dupIdx = investmentPresets.findIndex(p => p.name === name);
+  if (dupIdx >= 0 && name !== currentSel) {
+    if (!confirm(`"${name}" 이름의 프리셋이 이미 있습니다. 덮어쓰시겠습니까?`)) return;
+  }
+  const preset = { name, items: JSON.parse(JSON.stringify(items)), updatedAt: Date.now() };
+  if (dupIdx >= 0) investmentPresets[dupIdx] = preset;
+  else             investmentPresets.push(preset);
+  saveInvestmentPresetsToStorage();
+  renderProfitModal();
+  _setPresetSelectValue(name);
+  alert(`"${name}" 프리셋(${items.length}개 항목)이 저장되었습니다.`);
+}
+
+function loadPreset(name) {
+  if (!currentProfitRid) return;
+  if (!name) return;  // "-- 선택 --" 옵션
+  const preset = investmentPresets.find(p => p.name === name);
+  if (!preset) return;
+  if (!confirm(`"${name}" 프리셋(${preset.items.length}개)을 불러오시겠습니까?\n현재 초기 투자 항목은 대체됩니다.`)) {
+    _setPresetSelectValue('');
+    return;
+  }
+  const stored = getProfitData(currentProfitRid) || {};
+  stored.investments = JSON.parse(JSON.stringify(preset.items));
+  setProfitData(currentProfitRid, stored);
+  renderProfitModal();
+  _setPresetSelectValue(name);
+}
+
+function renamePresetPrompt() {
+  const sel = document.getElementById('presetSelect');
+  if (!sel || !sel.value) { alert('이름을 변경할 프리셋을 먼저 선택하세요.'); return; }
+  const oldName = sel.value;
+  const newName = prompt(`"${oldName}"의 새 이름을 입력하세요`, oldName);
+  if (newName == null) return;
+  const trimmed = newName.trim();
+  if (!trimmed || trimmed === oldName) return;
+  if (investmentPresets.some(p => p.name === trimmed)) {
+    alert(`"${trimmed}" 이름의 프리셋이 이미 존재합니다.`);
+    return;
+  }
+  const idx = investmentPresets.findIndex(p => p.name === oldName);
+  if (idx < 0) return;
+  investmentPresets[idx].name = trimmed;
+  saveInvestmentPresetsToStorage();
+  renderProfitModal();
+  _setPresetSelectValue(trimmed);
+}
+
+function deletePresetPrompt() {
+  const sel = document.getElementById('presetSelect');
+  if (!sel || !sel.value) { alert('삭제할 프리셋을 먼저 선택하세요.'); return; }
+  const name = sel.value;
+  if (!confirm(`"${name}" 프리셋을 삭제하시겠습니까?\n(현재 매물의 투자 항목은 영향 없음)`)) return;
+  investmentPresets = investmentPresets.filter(p => p.name !== name);
+  saveInvestmentPresetsToStorage();
+  renderProfitModal();
+  _setPresetSelectValue('');
 }
 
 /* 사용자 커스텀 디폴트를 지우고 출시 기본값으로 되돌림 */
@@ -2223,15 +2471,61 @@ function renderAnalysisResults(results) {
   lastResults = results;
   document.getElementById('simPanel').style.display = '';
 
-  // 모든 월 키 수집 (캐시)
+  // 표시 범위 드롭다운 채우기 + 필터 적용 (sortAndRender 포함)
+  populateDisplayRangeSelect();
+  applyMonthFilter();
+}
+
+/* ── 표시 범위 드롭다운 ────────────────────────────
+ * 분석 결과의 모든 월을 옵션으로 채움. 기본값은 마지막(가장 늦은) 월.
+ */
+function populateDisplayRangeSelect() {
+  const sel = document.getElementById('displayUntilYm');
+  if (!sel) return;
   const monthSet = new Set();
-  results.forEach(r => {
+  lastResults.forEach(r => {
     if (r.monthly) Object.keys(r.monthly).forEach(ym => monthSet.add(ym));
   });
-  lastMonths = Array.from(monthSet).sort();
+  const months = Array.from(monthSet).sort();
+  if (!months.length) { sel.innerHTML = ''; return; }
+  const lastYm = months[months.length - 1];
+  sel.innerHTML = months.map(ym => {
+    const [y, m] = ym.split('-');
+    return `<option value="${ym}" ${ym === lastYm ? 'selected' : ''}>~ ${y.slice(2)}.${parseInt(m)}월</option>`;
+  }).join('');
+}
 
-  // 기본 정렬: 전체 예약율 내림차순 (이미 currentSort 기본값과 일치)
+/* ── 표시 범위 필터 적용 ────────────────────────────
+ * 드롭다운 값 이하의 월만 표시. 각 매물의 전체 예약율도 표시 범위 기준으로 재계산.
+ */
+function applyMonthFilter() {
+  if (!lastResults.length) return;
+  const sel = document.getElementById('displayUntilYm');
+  const maxYm = sel ? sel.value : '';
+
+  const monthSet = new Set();
+  lastResults.forEach(r => {
+    if (r.monthly) Object.keys(r.monthly).forEach(ym => monthSet.add(ym));
+  });
+  // 필터 적용 (maxYm 이하만)
+  lastMonths = Array.from(monthSet).filter(ym => !maxYm || ym <= maxYm).sort();
+
+  // 각 매물의 전체 예약율을 표시 범위 기준으로 재계산
+  lastResults.forEach(r => {
+    if (r.error || !r.monthly) return;
+    const inRange = Object.entries(r.monthly)
+      .filter(([ym, v]) => (!maxYm || ym <= maxYm) && !v.error);
+    const totalDays    = inRange.reduce((s, [, v]) => s + (v.total   || 0), 0);
+    const totalBlocked = inRange.reduce((s, [, v]) => s + (v.blocked || 0), 0);
+    r.filtered_total_days    = totalDays;
+    r.filtered_total_blocked = totalBlocked;
+    r.filtered_overall_rate  = totalDays > 0
+      ? Math.round(totalBlocked / totalDays * 1000) / 10 : 0;
+  });
+
   sortAndRender();
+  // 수익분석 모달이 열려있다면 occupancy 등 자동값을 새로 반영
+  if (currentProfitRid) updateProfitDisplay();
 }
 
 /* ── 정렬 키 추출 ──────────────────────────────── */
@@ -2247,7 +2541,7 @@ function getSortValue(r, key) {
   if (key === 'floor')   return _floorNum(r);
   if (key === 'area')    return (r.detail && r.detail.pyeong) || 0;
   if (key === 'fee')     return r.using_fee || 0;
-  if (key === 'overall') return r.overall_rate || 0;
+  if (key === 'overall') return r.filtered_overall_rate != null ? r.filtered_overall_rate : (r.overall_rate || 0);
   if (key.startsWith('month:')) {
     const ym = key.slice(6);
     const v = (r.monthly||{})[ym];
@@ -2450,15 +2744,18 @@ function buildAnalysisRow(r, months, grouped) {
       </tr>`;
   }
 
-  const rate = r.overall_rate || 0;
+  // 전체 예약율: 표시 범위 필터가 적용되어 있으면 필터된 값, 아니면 원본
+  const rate         = r.filtered_overall_rate  != null ? r.filtered_overall_rate  : (r.overall_rate   || 0);
+  const totalDays    = r.filtered_total_days    != null ? r.filtered_total_days    : (r.total_days     || 0);
+  const totalBlocked = r.filtered_total_blocked != null ? r.filtered_total_blocked : (r.total_blocked  || 0);
   const rateClass = rate >= 70 ? 'rate-high' : rate >= 40 ? 'rate-med' : 'rate-low';
 
   // 전체 예약율 셀에 매달 정보를 묶어서 데이터로 임베드
   const yearData = {
     title:         r.title,
     overall_rate:  rate,
-    total_days:    r.total_days,
-    total_blocked: r.total_blocked,
+    total_days:    totalDays,
+    total_blocked: totalBlocked,
     months: months.map(ym => {
       const v = (r.monthly||{})[ym];
       if (!v || v.error) return null;
@@ -2893,6 +3190,7 @@ checkSession();
 loadProfitDataAll();
 loadProfitDefaults();
 loadCustomDefaultInvestments();
+loadInvestmentPresets();
 // 글로벌 패널 입력 동기화
 (function() {
   const occEl = document.getElementById('globalOccupancy');
