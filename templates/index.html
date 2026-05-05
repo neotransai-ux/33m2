@@ -367,7 +367,13 @@
     }
     .group-addr {
       font-weight: 700; color: #1a2a4a;
-      display: inline-flex; align-items: center; gap: 4px;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .group-count {
+      background: #2c72c8; color: #fff;
+      font-size: .72rem; font-weight: 700;
+      padding: 2px 8px; border-radius: 10px;
+      letter-spacing: .02em;
     }
     .group-meta { color: #555; font-size: .78rem; }
     .group-meta strong { color: #2c72c8; }
@@ -2677,8 +2683,8 @@ function buildAnalysisTable(items, months, opts) {
       bodyHtml += `
         <tr class="group-header-row"><td colspan="${totalCols}">
           <div class="group-header">
-            <span class="group-addr">📍 ${esc(addr)}</span>
-            <span class="group-meta">${rooms.length}건 · 평균 예약율 <strong>${avgRate}%</strong></span>
+            <span class="group-addr">📍 ${esc(addr)}<span class="group-count">${rooms.length}건</span></span>
+            <span class="group-meta">평균 예약율 <strong>${avgRate}%</strong></span>
           </div>
         </td></tr>`;
       bodyHtml += rooms.map(r => buildAnalysisRow(r, months, true)).join('');
