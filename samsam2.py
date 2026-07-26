@@ -1,7 +1,6 @@
 from flask import Flask, render_template, jsonify, request, session
 import requests
 import time
-import glob
 import os
 import json
 from datetime import date, datetime, timedelta
@@ -83,17 +82,10 @@ HEADERS = {
 
 
 # ── Selenium 드라이버 (로그인 전용) ────────────────────────────────────
-def _get_driver_path():
-    wdm_dir = os.path.expanduser("~/.wdm/drivers/chromedriver/win64")
-    paths = glob.glob(f"{wdm_dir}/**/chromedriver.exe", recursive=True)
-    return paths[0] if paths else None
-
-
 def _make_driver(headless=True):
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
-    from webdriver_manager.chrome import ChromeDriverManager
 
     options = Options()
     if headless:
@@ -106,9 +98,21 @@ def _make_driver(headless=True):
     options.add_experimental_option("useAutomationExtension", False)
     options.add_argument(f"user-agent={HEADERS['User-Agent']}")
 
-    driver_path = _get_driver_path()
-    service = Service(driver_path) if driver_path else Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
+    # 1순위: Selenium Manager(selenium 4.6+ 내장)가 설치된 Chrome 버전에 맞는
+    #        chromedriver를 자동으로 내려받아 사용한다.
+    try:
+        driver = webdriver.Chrome(service=Service(), options=options)
+    except Exception as sm_err:
+        # 2순위: webdriver_manager 폴백. ~/.wdm 캐시를 그대로 쓰면 예전 버전
+        #        드라이버가 잡혀 SessionNotCreatedException이 나므로 사용하지 않는다.
+        try:
+            from webdriver_manager.chrome import ChromeDriverManager
+        except ImportError:
+            raise sm_err
+        driver = webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()), options=options
+        )
+
     driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
         "source": "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
     })
@@ -332,7 +336,11 @@ def selenium_login(email, password):
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
 
-    driver = _make_driver(headless=True)
+    try:
+        driver = _make_driver(headless=True)
+    except Exception as e:
+        return None, f"Chrome 드라이버를 시작하지 못했습니다: {e}"
+
     error  = None
     cookies = {}
     try:
